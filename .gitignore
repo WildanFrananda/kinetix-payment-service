@@ -1,0 +1,65 @@
+# ==========================================
+# Build Tools & Outputs
+# ==========================================
+target/
+build/
+out/
+bin/
+
+# Maven/Gradle wrappers should be tracked, but ignore local overrides or cache
+.gradle/
+.m2/
+.mvn/timing.properties
+
+# Ensure wrapper JAR files are NOT ignored (reverses general rule if *.jar is added later)
+!/.mvn/wrapper/maven-wrapper.jar
+!/gradle/wrapper/gradle-wrapper.jar
+
+# ==========================================
+# IDE Specific Settings
+# ==========================================
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+### Eclipse / STS (Spring Tool Suite) ###
+.metadata/
+.classpath
+.project
+.settings/
+.factorypath
+.springBeans
+.sts4-cache
+.apt_generated
+
+### VS Code ###
+.vscode/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+
+# ==========================================
+# Local Configuration & Sensitive Data
+# ==========================================
+# Never commit your database credentials or API secrets
+.env
+.env.local
+*.local
+application-local.properties
+application-local.yml
+
+# ==========================================
+# Log Files & System Files
+# ==========================================
+*.log
+logs/
+hs_err_pid*
+
+# OS specifics
+.DS_Store
+Thumbs.db

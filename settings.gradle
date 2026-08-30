@@ -1,0 +1,6 @@
+rootProject.name = 'kinetix-payment-service'
+
+include 'modules:domain'
+include 'modules:application'
+include 'modules:infrastructure'
+include 'modules:api'

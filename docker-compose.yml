@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  kinetix-payment-postgres:
+    image: postgres:16-alpine
+    container_name: kinetix-payment-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: kinetix_payment_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5437:5432"
+    volumes:
+      - payment_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  payment_postgres_data:

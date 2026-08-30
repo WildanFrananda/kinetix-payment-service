@@ -1,0 +1,27 @@
+server:
+  port: ${PORT:8003}
+
+spring:
+  application:
+    name: kinetix-payment-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5437/kinetix_payment_dev}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+midtrans:
+  server-key: ${MIDTRANS_SERVER_KEY:SB-Mid-server-YOUR_REAL_SERVER_KEY}
+  client-key: ${MIDTRANS_CLIENT_KEY:SB-Mid-client-YOUR_REAL_CLIENT_KEY}
+  is-production: ${MIDTRANS_IS_PRODUCTION:false}
+
+grpc:
+  server:
+    port: ${GRPC_PORT:50056}
