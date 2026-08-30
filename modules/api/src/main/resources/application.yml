@@ -18,8 +18,8 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
 midtrans:
-  server-key: ${MIDTRANS_SERVER_KEY:SB-Mid-server-YOUR_REAL_SERVER_KEY}
-  client-key: ${MIDTRANS_CLIENT_KEY:SB-Mid-client-YOUR_REAL_CLIENT_KEY}
+  server-key: ${MIDTRANS_SERVER_KEY}
+  client-key: ${MIDTRANS_CLIENT_KEY}
   is-production: ${MIDTRANS_IS_PRODUCTION:false}
 
 grpc:
