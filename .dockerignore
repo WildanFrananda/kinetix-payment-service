@@ -1,0 +1,31 @@
+# Keep secrets and local state out of the build context (P0-IMG-01).
+# Without this, COPY bakes .env — which holds rotated credentials — and the whole .git
+# history into distributable image layers. `docker history` exposes them even if a later
+# layer deletes the file.
+
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+.git
+.gitignore
+.github
+.gitlab-ci.yml
+
+Dockerfile
+compose*.yaml
+docker-compose*.yml
+.dockerignore
+
+*.md
+docs/
+
+# Gradle state: the daemon cache and prior build output belong to the host, not the image.
+.gradle/
+build/
+*/build/
+modules/*/build/
+bin/
+.vscode/

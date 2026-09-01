@@ -13,7 +13,11 @@ dependencies {
     implementation project(':modules:domain')
     implementation project(':modules:application')
 
-    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    // `api`, not `implementation`: the composition root in :modules:api carries
+    // @EnableJpaRepositories and @EntityScan, so spring-data-jpa is part of what this module
+    // publishes to its consumers, not a private detail. As `implementation` it was invisible
+    // on the api module's compile classpath and PaymentApplication did not compile at all.
+    api 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.postgresql:postgresql'
     implementation 'com.fasterxml.jackson.core:jackson-databind'
 
