@@ -9,19 +9,25 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+  liquibase:
+    enabled: false
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
 midtrans:
+  # Kinetix stays on Midtrans sandbox even in production. Moving environments is this URL plus
+  # the server key and nothing else — there is deliberately no is-production flag, because a
+  # flag means the production path is a code path that never runs until it matters.
   server-key: ${MIDTRANS_SERVER_KEY}
-  client-key: ${MIDTRANS_CLIENT_KEY}
-  is-production: ${MIDTRANS_IS_PRODUCTION:false}
+  base-url: ${MIDTRANS_BASE_URL}
 
 grpc:
   server:
-    port: ${GRPC_PORT:50056}
+    # No default. compose declares GRPC_PORT for this service, and a fallback here would let the
+    # topology and the process bind different ports with nothing reporting it.
+    port: ${GRPC_PORT}

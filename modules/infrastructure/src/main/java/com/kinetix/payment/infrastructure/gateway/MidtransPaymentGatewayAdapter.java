@@ -30,13 +30,11 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
 
     public MidtransPaymentGatewayAdapter(
         @Value("${midtrans.server-key}") String serverKey,
-        @Value("${midtrans.is-production}") boolean isProduction,
+        @Value("${midtrans.base-url}") String baseUrl,
         ObjectMapper objectMapper
     ) {
         this.serverKey = serverKey;
-        this.baseUrl = isProduction
-            ? "https://api.midtrans.com/v2"
-            : "https://api.sandbox.midtrans.com/v2";
+        this.baseUrl = baseUrl;
         this.httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();

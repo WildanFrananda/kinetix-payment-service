@@ -2,6 +2,7 @@ plugins {
     id 'application'
     id 'org.springframework.boot'
     id 'io.spring.dependency-management'
+    id 'org.liquibase.gradle' version '2.2.2'
 }
 
 dependencies {
@@ -12,8 +13,39 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
+    implementation 'org.liquibase:liquibase-core'
+
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
+
+dependencies {
+    liquibaseRuntime 'org.liquibase:liquibase-core:4.33.0'
+    liquibaseRuntime 'org.liquibase.ext:liquibase-hibernate6:4.33.0'
+    liquibaseRuntime 'org.springframework.boot:spring-boot-starter-data-jpa'
+    liquibaseRuntime 'org.postgresql:postgresql'
+    liquibaseRuntime 'info.picocli:picocli:4.7.6'
+    liquibaseRuntime 'org.yaml:snakeyaml'
+    liquibaseRuntime project(':modules:infrastructure')
+    liquibaseRuntime sourceSets.main.output
+}
+
+liquibase {
+    activities {
+        main {
+            changelogFile "${projectDir}/src/main/resources/db/changelog/db.changelog-master.yaml"
+            url System.getenv('DIFF_DB_URL')
+            username System.getenv('DIFF_DB_USERNAME')
+            password System.getenv('DIFF_DB_PASSWORD')
+            referenceUrl 'hibernate:spring:com.kinetix.payment.infrastructure.persistence' +
+                '?dialect=org.hibernate.dialect.PostgreSQLDialect'
+        }
+    }
+}
+
+tasks.matching { it.name.equalsIgnoreCase('diffChangeLog') || it.name.equalsIgnoreCase('generateChangeLog') }
+    .configureEach {
+        dependsOn ':modules:infrastructure:jar', ':modules:domain:jar', ':modules:application:jar', 'classes'
+    }
 
 application {
     mainClass = 'com.kinetix.payment.api.PaymentApplication'

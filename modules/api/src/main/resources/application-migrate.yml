@@ -1,0 +1,20 @@
+# The `migrate` profile: apply pending changesets, then exit.
+#
+# It runs the same image as the service, the way identity's migrate step does. The web server
+# and the gRPC server are both switched off so the process has nothing left to keep it alive
+# once Liquibase is done, which is what makes it a genuine one-shot: it exits, and compose can
+# gate the application on it having exited 0.
+spring:
+  main:
+    web-application-type: none
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  jpa:
+    hibernate:
+      ddl-auto: none
+
+grpc:
+  server:
+    # net.devh treats a negative port as "do not start the server".
+    port: -1
