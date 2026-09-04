@@ -29,4 +29,8 @@ USER 10001:10001
 
 EXPOSE 8003 50056
 
+
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8003/health/ready > /dev/null || exit 1
+
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "/app/application.jar"]
