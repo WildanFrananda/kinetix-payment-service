@@ -26,8 +26,31 @@ midtrans:
   server-key: ${MIDTRANS_SERVER_KEY}
   base-url: ${MIDTRANS_BASE_URL}
 
+# The identity service is the only thing on this platform that may sign a token. Every value
+# here is required with no default: a fallback issuer or audience would mean a misconfigured
+# deployment verifies tokens against the wrong authority and reports nothing.
+kinetix:
+  jwt:
+    jwks-uri: ${IDENTITY_JWKS_URL}
+    issuer: ${JWT_ISSUER}
+    audience: ${JWT_AUDIENCE}
+  grpc:
+    # Which services may call this server. Today only order — it already carries
+    # payment_service.proto and is the caller escrow exists for. mTLS proves a peer holds a
+    # certificate from our CA, which every service does; this is what makes the surface narrow.
+    allowed-callers: ${GRPC_ALLOWED_CALLERS}
+
 grpc:
   server:
     # No default. compose declares GRPC_PORT for this service, and a fallback here would let the
     # topology and the process bind different ports with nothing reporting it.
     port: ${GRPC_PORT}
+    security:
+      enabled: true
+      certificateChain: file:${KINETIX_PKI_DIR:/pki}/tls.crt
+      privateKey: file:${KINETIX_PKI_DIR:/pki}/tls.key
+      trustCertCollection: file:${KINETIX_PKI_DIR:/pki}/ca.pem
+      # REQUIRE, not OPTIONAL. With OPTIONAL a caller that presents no certificate still reaches
+      # the interceptor, and the whole guarantee rests on that one check rather than on the
+      # handshake refusing first.
+      clientAuth: REQUIRE
