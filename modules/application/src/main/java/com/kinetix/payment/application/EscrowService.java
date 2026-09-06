@@ -67,6 +67,10 @@ public class EscrowService {
         return escrowRepository.save(hold);
     }
 
+    public EscrowHold findByOrderNumber(String orderNumber) {
+        return escrowRepository.findByOrderNumber(orderNumber).orElse(null);
+    }
+
     public EscrowHold releaseEscrow(String orderNumber) {
         EscrowHold hold = escrowRepository.findByOrderNumber(orderNumber)
             .orElseThrow(() -> new EscrowNotFoundException("Escrow hold not found for order: " + orderNumber));

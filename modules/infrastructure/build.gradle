@@ -56,7 +56,7 @@ sourceSets {
                     'build/generated/source/proto/main/grpc'
         }
         proto {
-            srcDir '../../proto'
+            srcDir '../../.contracts/proto'
         }
     }
 }

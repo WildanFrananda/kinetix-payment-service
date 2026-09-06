@@ -10,7 +10,16 @@ COPY modules/api/build.gradle ./modules/api/
 
 RUN gradle --no-daemon dependencies --quiet || true
 
-COPY proto ./proto
+# `bin/` is the compiled-class output directory here and is excluded from the build context,
+# so the script lives in scripts/.
+COPY scripts ./scripts
+
+# The wire contracts, at the commit bin/sync-contracts pins. Fetched rather than copied: this
+# repository tracks no .proto at all, which is what S9's exit criterion measures.
+RUN apt-get update \
+  && apt-get install --no-install-recommends -y git \
+  && sh scripts/sync-contracts \
+  && rm -rf /var/lib/apt/lists/*
 COPY modules ./modules
 
 RUN gradle --no-daemon :modules:api:bootJar -x test \

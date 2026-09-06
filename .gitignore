@@ -63,3 +63,6 @@ hs_err_pid*
 # OS specifics
 .DS_Store
 Thumbs.db
+
+# Wire contracts, fetched by bin/sync-contracts at a pinned commit. Never committed.
+/.contracts/
