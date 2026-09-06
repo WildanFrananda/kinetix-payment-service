@@ -23,24 +23,24 @@ public class WalletService {
         this.driverWalletRepository = driverWalletRepository;
     }
 
-    public CustomerWallet getCustomerWallet(Long customerId) {
-        return customerWalletRepository.findByCustomerId(customerId)
-            .orElseGet(() -> customerWalletRepository.save(CustomerWallet.createInitial(customerId)));
+    public CustomerWallet getCustomerWallet(String customerPrincipalId) {
+        return customerWalletRepository.findByCustomerPrincipalId(customerPrincipalId)
+            .orElseGet(() -> customerWalletRepository.save(CustomerWallet.createInitial(customerPrincipalId)));
     }
 
-    public CustomerWallet topUpCustomerWallet(Long customerId, BigDecimal amount) {
-        CustomerWallet wallet = getCustomerWallet(customerId);
+    public CustomerWallet topUpCustomerWallet(String customerPrincipalId, BigDecimal amount) {
+        CustomerWallet wallet = getCustomerWallet(customerPrincipalId);
         CustomerWallet updated = wallet.topUp(amount);
         return customerWalletRepository.save(updated);
     }
 
-    public MerchantWallet getMerchantWallet(Long merchantId) {
-        return merchantWalletRepository.findByMerchantId(merchantId)
-            .orElseGet(() -> merchantWalletRepository.save(MerchantWallet.createInitial(merchantId)));
+    public MerchantWallet getMerchantWallet(String merchantPrincipalId) {
+        return merchantWalletRepository.findByMerchantPrincipalId(merchantPrincipalId)
+            .orElseGet(() -> merchantWalletRepository.save(MerchantWallet.createInitial(merchantPrincipalId)));
     }
 
-    public DriverWallet getDriverWallet(Long driverId) {
-        return driverWalletRepository.findByDriverId(driverId)
-            .orElseGet(() -> driverWalletRepository.save(DriverWallet.createInitial(driverId)));
+    public DriverWallet getDriverWallet(String driverPrincipalId) {
+        return driverWalletRepository.findByDriverPrincipalId(driverPrincipalId)
+            .orElseGet(() -> driverWalletRepository.save(DriverWallet.createInitial(driverPrincipalId)));
     }
 }

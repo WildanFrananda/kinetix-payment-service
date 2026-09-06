@@ -5,17 +5,29 @@ import java.time.Instant;
 
 public record MerchantWallet(
     Long id,
-    Long merchantId,
+    String merchantPrincipalId,
     BigDecimal availableBalance,
     BigDecimal pendingEscrowBalance,
     String currency,
     Instant createdAt,
     Instant updatedAt
 ) {
-    public static MerchantWallet createInitial(Long merchantId) {
+    public MerchantWallet {
+        if (merchantPrincipalId == null || merchantPrincipalId.isBlank()) {
+            throw new IllegalArgumentException("A merchant principal id is required");
+        }
+        if (availableBalance.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Available balance cannot be negative");
+        }
+        if (pendingEscrowBalance.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Pending escrow balance cannot be negative");
+        }
+    }
+
+    public static MerchantWallet createInitial(String merchantPrincipalId) {
         return new MerchantWallet(
             null,
-            merchantId,
+            merchantPrincipalId,
             BigDecimal.ZERO,
             BigDecimal.ZERO,
             "IDR",
@@ -27,7 +39,7 @@ public record MerchantWallet(
     public MerchantWallet addPendingEscrow(BigDecimal amount) {
         return new MerchantWallet(
             id,
-            merchantId,
+            merchantPrincipalId,
             availableBalance,
             pendingEscrowBalance.add(amount),
             currency,
@@ -39,7 +51,7 @@ public record MerchantWallet(
     public MerchantWallet releaseEscrowToAvailable(BigDecimal amount) {
         return new MerchantWallet(
             id,
-            merchantId,
+            merchantPrincipalId,
             availableBalance.add(amount),
             pendingEscrowBalance.subtract(amount).max(BigDecimal.ZERO),
             currency,

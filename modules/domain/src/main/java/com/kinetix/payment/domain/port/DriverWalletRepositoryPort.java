@@ -4,6 +4,6 @@ import com.kinetix.payment.domain.entity.DriverWallet;
 import java.util.Optional;
 
 public interface DriverWalletRepositoryPort {
-    Optional<DriverWallet> findByDriverId(Long driverId);
+    Optional<DriverWallet> findByDriverPrincipalId(String driverPrincipalId);
     DriverWallet save(DriverWallet wallet);
 }

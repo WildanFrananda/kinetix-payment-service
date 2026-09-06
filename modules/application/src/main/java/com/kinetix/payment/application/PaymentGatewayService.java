@@ -17,13 +17,13 @@ public class PaymentGatewayService {
         this.transactionRepository = transactionRepository;
     }
 
-    public PaymentTransaction topUpViaGateway(Long customerId, BigDecimal amount, PaymentTransaction.PaymentMethod method) {
-        PaymentTransaction transaction = paymentGatewayPort.createTopUpTransaction(customerId, amount, method);
+    public PaymentTransaction topUpViaGateway(String customerPrincipalId, BigDecimal amount, PaymentTransaction.PaymentMethod method) {
+        PaymentTransaction transaction = paymentGatewayPort.createTopUpTransaction(customerPrincipalId, amount, method);
         return transactionRepository.save(transaction);
     }
 
-    public PaymentTransaction processCheckoutPayment(String orderNumber, Long customerId, BigDecimal amount, PaymentTransaction.PaymentMethod method) {
-        PaymentTransaction transaction = paymentGatewayPort.processCheckoutPayment(orderNumber, customerId, amount, method);
+    public PaymentTransaction processCheckoutPayment(String orderNumber, String customerPrincipalId, BigDecimal amount, PaymentTransaction.PaymentMethod method) {
+        PaymentTransaction transaction = paymentGatewayPort.processCheckoutPayment(orderNumber, customerPrincipalId, amount, method);
         return transactionRepository.save(transaction);
     }
 }

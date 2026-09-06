@@ -10,9 +10,9 @@ public record CheckoutPaymentRequest(
     String orderNumber,
 
     @NotNull(message = "Merchant ID is required")
-    Long merchantId,
+    String merchantPrincipalId,
 
-    Long driverId,
+    String driverPrincipalId,
 
     @NotNull(message = "Total order amount is required")
     @DecimalMin(value = "1.00", message = "Total order amount must be greater than 0")

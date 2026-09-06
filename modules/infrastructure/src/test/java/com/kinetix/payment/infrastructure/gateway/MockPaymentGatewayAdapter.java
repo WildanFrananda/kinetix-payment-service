@@ -8,7 +8,7 @@ import java.util.UUID;
 
 public class MockPaymentGatewayAdapter implements PaymentGatewayPort {
     @Override
-    public PaymentTransaction createTopUpTransaction(Long customerId, BigDecimal amount, PaymentTransaction.PaymentMethod method) {
+    public PaymentTransaction createTopUpTransaction(String customerPrincipalId, BigDecimal amount, PaymentTransaction.PaymentMethod method) {
         String refNum = "TOPUP-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         String extTxId = "MOCK-PG-" + System.currentTimeMillis();
 
@@ -16,7 +16,7 @@ public class MockPaymentGatewayAdapter implements PaymentGatewayPort {
             null,
             refNum,
             extTxId,
-            customerId,
+            customerPrincipalId,
             PaymentTransaction.TransactionType.TOPUP,
             method != null ? method : PaymentTransaction.PaymentMethod.MOCK_SANDBOX,
             amount,
@@ -27,7 +27,7 @@ public class MockPaymentGatewayAdapter implements PaymentGatewayPort {
     }
 
     @Override
-    public PaymentTransaction processCheckoutPayment(String orderNumber, Long customerId, BigDecimal amount, PaymentTransaction.PaymentMethod method) {
+    public PaymentTransaction processCheckoutPayment(String orderNumber, String customerPrincipalId, BigDecimal amount, PaymentTransaction.PaymentMethod method) {
         String refNum = "PAY-" + orderNumber;
         String extTxId = "MOCK-PG-" + System.currentTimeMillis();
 
@@ -35,7 +35,7 @@ public class MockPaymentGatewayAdapter implements PaymentGatewayPort {
             null,
             refNum,
             extTxId,
-            customerId,
+            customerPrincipalId,
             PaymentTransaction.TransactionType.CHECKOUT_PAYMENT,
             method != null ? method : PaymentTransaction.PaymentMethod.INTERNAL_WALLET,
             amount,

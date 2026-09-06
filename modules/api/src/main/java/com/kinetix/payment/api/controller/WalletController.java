@@ -27,7 +27,7 @@ public class WalletController {
     @GetMapping("/customer/balance")
     public ResponseEntity<WalletResponse> getCustomerBalance(@AuthenticationPrincipal Jwt jwt) {
         AccessClaims caller = require(jwt, AccessClaims.CUSTOMER);
-        CustomerWallet wallet = walletService.getCustomerWallet(caller.userId());
+        CustomerWallet wallet = walletService.getCustomerWallet(caller.principalId());
         return ResponseEntity.ok(WalletResponse.fromCustomer(wallet));
     }
 
@@ -37,27 +37,27 @@ public class WalletController {
         @Valid @RequestBody TopUpRequest request
     ) {
         AccessClaims caller = require(jwt, AccessClaims.CUSTOMER);
-        CustomerWallet wallet = walletService.topUpCustomerWallet(caller.userId(), request.amount());
+        CustomerWallet wallet = walletService.topUpCustomerWallet(caller.principalId(), request.amount());
         return ResponseEntity.status(HttpStatus.CREATED).body(WalletResponse.fromCustomer(wallet));
     }
 
     @GetMapping("/merchant/balance")
     public ResponseEntity<WalletResponse> getMerchantBalance(@AuthenticationPrincipal Jwt jwt) {
         AccessClaims caller = require(jwt, AccessClaims.SELLER);
-        MerchantWallet wallet = walletService.getMerchantWallet(caller.userId());
+        MerchantWallet wallet = walletService.getMerchantWallet(caller.principalId());
         return ResponseEntity.ok(WalletResponse.fromMerchant(wallet));
     }
 
     @GetMapping("/driver/balance")
     public ResponseEntity<WalletResponse> getDriverBalance(@AuthenticationPrincipal Jwt jwt) {
         AccessClaims caller = require(jwt, AccessClaims.COURIER);
-        DriverWallet wallet = walletService.getDriverWallet(caller.userId());
+        DriverWallet wallet = walletService.getDriverWallet(caller.principalId());
         return ResponseEntity.ok(WalletResponse.fromDriver(wallet));
     }
 
     private AccessClaims require(Jwt jwt, String role) {
         AccessClaims caller = AccessClaims.of(jwt);
-        if (!caller.mayActOn(role, caller.userId())) {
+        if (!caller.mayActOn(role, caller.principalId())) {
             throw new ForbiddenException(
                 "this account is a " + caller.role() + " and holds no " + role + " wallet");
         }

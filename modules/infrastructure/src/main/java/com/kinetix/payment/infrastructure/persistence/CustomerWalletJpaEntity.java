@@ -11,8 +11,8 @@ public class CustomerWalletJpaEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "customer_id", nullable = false, unique = true)
-    private Long customerId;
+    @Column(name = "customer_principal_id", nullable = false, unique = true)
+    private String customerPrincipalId;
 
     @Column(name = "balance", nullable = false, precision = 12, scale = 2)
     private BigDecimal balance;
@@ -31,9 +31,9 @@ public class CustomerWalletJpaEntity {
 
     public CustomerWalletJpaEntity() {}
 
-    public CustomerWalletJpaEntity(Long id, Long customerId, BigDecimal balance, BigDecimal heldBalance, String currency, Instant createdAt, Instant updatedAt) {
+    public CustomerWalletJpaEntity(Long id, String customerPrincipalId, BigDecimal balance, BigDecimal heldBalance, String currency, Instant createdAt, Instant updatedAt) {
         this.id = id;
-        this.customerId = customerId;
+        this.customerPrincipalId = customerPrincipalId;
         this.balance = balance;
         this.heldBalance = heldBalance;
         this.currency = currency;
@@ -42,7 +42,7 @@ public class CustomerWalletJpaEntity {
     }
 
     public Long getId() { return id; }
-    public Long getCustomerId() { return customerId; }
+    public String getCustomerPrincipalId() { return customerPrincipalId; }
     public BigDecimal getBalance() { return balance; }
     public BigDecimal getHeldBalance() { return heldBalance; }
     public String getCurrency() { return currency; }

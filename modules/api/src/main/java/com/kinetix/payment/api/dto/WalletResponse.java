@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 
 public record WalletResponse(
     Long id,
-    Long ownerId,
+    String ownerPrincipalId,
     String ownerType,
     BigDecimal availableBalance,
     BigDecimal heldOrPendingBalance,
@@ -16,7 +16,7 @@ public record WalletResponse(
     public static WalletResponse fromCustomer(CustomerWallet wallet) {
         return new WalletResponse(
             wallet.id(),
-            wallet.customerId(),
+            wallet.customerPrincipalId(),
             "CUSTOMER",
             wallet.balance(),
             wallet.heldBalance(),
@@ -27,7 +27,7 @@ public record WalletResponse(
     public static WalletResponse fromMerchant(MerchantWallet wallet) {
         return new WalletResponse(
             wallet.id(),
-            wallet.merchantId(),
+            wallet.merchantPrincipalId(),
             "MERCHANT",
             wallet.availableBalance(),
             wallet.pendingEscrowBalance(),
@@ -38,7 +38,7 @@ public record WalletResponse(
     public static WalletResponse fromDriver(DriverWallet wallet) {
         return new WalletResponse(
             wallet.id(),
-            wallet.driverId(),
+            wallet.driverPrincipalId(),
             "DRIVER",
             wallet.availableBalance(),
             wallet.pendingEscrowBalance(),

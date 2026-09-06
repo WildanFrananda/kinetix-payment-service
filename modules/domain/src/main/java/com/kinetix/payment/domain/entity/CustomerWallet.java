@@ -6,7 +6,7 @@ import java.time.Instant;
 
 public record CustomerWallet(
     Long id,
-    Long customerId,
+    String customerPrincipalId,
     BigDecimal balance,
     BigDecimal heldBalance,
     String currency,
@@ -14,6 +14,9 @@ public record CustomerWallet(
     Instant updatedAt
 ) {
     public CustomerWallet {
+        if (customerPrincipalId == null || customerPrincipalId.isBlank()) {
+            throw new IllegalArgumentException("A customer principal id is required");
+        }
         if (balance.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("Balance cannot be negative");
         }
@@ -22,10 +25,10 @@ public record CustomerWallet(
         }
     }
 
-    public static CustomerWallet createInitial(Long customerId) {
+    public static CustomerWallet createInitial(String customerPrincipalId) {
         return new CustomerWallet(
             null,
-            customerId,
+            customerPrincipalId,
             BigDecimal.ZERO,
             BigDecimal.ZERO,
             "IDR",
@@ -40,7 +43,7 @@ public record CustomerWallet(
         }
         return new CustomerWallet(
             id,
-            customerId,
+            customerPrincipalId,
             balance.add(amount),
             heldBalance,
             currency,
@@ -58,7 +61,7 @@ public record CustomerWallet(
         }
         return new CustomerWallet(
             id,
-            customerId,
+            customerPrincipalId,
             balance.subtract(amount),
             heldBalance,
             currency,

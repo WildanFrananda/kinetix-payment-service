@@ -28,11 +28,17 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
         Payment.CreateEscrowHoldRequest request,
         StreamObserver<Payment.EscrowHoldResponse> responseObserver
     ) {
-        responseObserver.onError(io.grpc.Status.UNIMPLEMENTED
-            .withDescription(
-                "CreateEscrowHold needs principal-keyed wallets, which land with the data model "
-                    + "in S10; this service still keys escrow on account ids")
-            .asRuntimeException());
+        EscrowHold hold = escrowService.createEscrowHold(
+            request.getOrderNumber(),
+            request.getCustomerPrincipalId(),
+            request.getMerchantPrincipalId(),
+            request.getDriverPrincipalId().isBlank() ? null : request.getDriverPrincipalId(),
+            fromMoney(request.getTotalOrderAmount()),
+            fromMoney(request.getMerchantAmount()),
+            fromMoney(request.getShippingFeeAmount())
+        );
+        responseObserver.onNext(toResponse(hold));
+        responseObserver.onCompleted();
     }
 
     @Override
@@ -73,9 +79,9 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
                 .setFound(true)
                 .setEscrowId(hold.id() == null ? "" : hold.id().toString())
                 .setOrderNumber(hold.orderNumber())
-                .setCustomerPrincipalId("")
-                .setMerchantPrincipalId("")
-                .setDriverPrincipalId("")
+                .setCustomerPrincipalId(hold.customerPrincipalId())
+                .setMerchantPrincipalId(hold.merchantPrincipalId())
+                .setDriverPrincipalId(hold.driverPrincipalId() == null ? "" : hold.driverPrincipalId())
                 .setTotalOrderAmount(toMoney(hold.totalOrderAmount()))
                 .setMerchantAmount(toMoney(hold.merchantAmount()))
                 .setShippingFeeAmount(toMoney(hold.shippingFeeAmount()))
@@ -92,6 +98,14 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
         }
 
         return builder.build();
+    }
+
+    private static BigDecimal fromMoney(Common.Money money) {
+        if (money == null) {
+            return BigDecimal.ZERO;
+        }
+        return BigDecimal.valueOf(money.getAmountMinor())
+            .divide(MINOR_PER_MAJOR);
     }
 
     private static Common.Money toMoney(BigDecimal amount) {

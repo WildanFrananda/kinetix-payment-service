@@ -34,9 +34,9 @@ public class PaymentController {
 
         EscrowHold hold = escrowService.createEscrowHold(
             request.orderNumber(),
-            caller.userId(),
-            request.merchantId(),
-            request.driverId(),
+            caller.principalId(),
+            request.merchantPrincipalId(),
+            request.driverPrincipalId(),
             request.totalOrderAmount(),
             request.merchantAmount(),
             request.shippingFeeAmount()

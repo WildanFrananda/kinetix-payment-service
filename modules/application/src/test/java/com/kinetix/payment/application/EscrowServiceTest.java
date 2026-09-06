@@ -21,6 +21,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class EscrowServiceTest {
+    private static final String MERCHANT = "3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3";
+    private static final String DRIVER = "b7e2c05f-9a34-4c88-b1d6-0e7a3f52d914";
     private EscrowRepositoryPort escrowRepository;
     private CustomerWalletRepositoryPort customerWalletRepository;
     private MerchantWalletRepositoryPort merchantWalletRepository;
@@ -44,27 +46,27 @@ class EscrowServiceTest {
 
     @Test
     void createEscrowHold_rejectsInsufficientCustomerBalance() {
-        Long customerId = 101L;
-        CustomerWallet emptyWallet = CustomerWallet.createInitial(customerId);
-        when(customerWalletRepository.findByCustomerId(customerId)).thenReturn(Optional.of(emptyWallet));
+        String customerPrincipalId = "9f1d4a3e-1c62-4d0a-9a7b-2f5c8e0b41d7";
+        CustomerWallet emptyWallet = CustomerWallet.createInitial(customerPrincipalId);
+        when(customerWalletRepository.findByCustomerPrincipalId(customerPrincipalId)).thenReturn(Optional.of(emptyWallet));
 
         assertThrows(InsufficientBalanceException.class, () ->
-            escrowService.createEscrowHold("ORD-1001", customerId, 50L, 10L, new BigDecimal("150000.00"), new BigDecimal("130000.00"), new BigDecimal("20000.00"))
+            escrowService.createEscrowHold("ORD-1001", customerPrincipalId, MERCHANT, DRIVER, new BigDecimal("150000.00"), new BigDecimal("130000.00"), new BigDecimal("20000.00"))
         );
     }
 
     @Test
     void createEscrowHold_successWhenBalanceSufficient() {
-        Long customerId = 101L;
-        CustomerWallet fundedWallet = CustomerWallet.createInitial(customerId).topUp(new BigDecimal("200000.00"));
-        when(customerWalletRepository.findByCustomerId(customerId)).thenReturn(Optional.of(fundedWallet));
+        String customerPrincipalId = "9f1d4a3e-1c62-4d0a-9a7b-2f5c8e0b41d7";
+        CustomerWallet fundedWallet = CustomerWallet.createInitial(customerPrincipalId).topUp(new BigDecimal("200000.00"));
+        when(customerWalletRepository.findByCustomerPrincipalId(customerPrincipalId)).thenReturn(Optional.of(fundedWallet));
         when(escrowRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         EscrowHold hold = escrowService.createEscrowHold(
             "ORD-1001",
-            customerId,
-            50L,
-            10L,
+            customerPrincipalId,
+            MERCHANT,
+            DRIVER,
             new BigDecimal("150000.00"),
             new BigDecimal("130000.00"),
             new BigDecimal("20000.00")

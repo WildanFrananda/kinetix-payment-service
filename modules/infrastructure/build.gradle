@@ -24,6 +24,8 @@ dependencies {
     implementation 'io.grpc:grpc-services:1.68.2'
     compileOnly 'org.apache.tomcat:annotations-api:6.0.53'
 
+    compileOnly 'org.liquibase:liquibase-core'
+
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 

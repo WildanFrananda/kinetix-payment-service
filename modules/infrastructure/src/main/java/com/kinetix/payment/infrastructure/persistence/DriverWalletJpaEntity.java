@@ -11,8 +11,8 @@ public class DriverWalletJpaEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "driver_id", nullable = false, unique = true)
-    private Long driverId;
+    @Column(name = "driver_principal_id", nullable = false, unique = true)
+    private String driverPrincipalId;
 
     @Column(name = "available_balance", nullable = false, precision = 12, scale = 2)
     private BigDecimal availableBalance;
@@ -31,9 +31,9 @@ public class DriverWalletJpaEntity {
 
     public DriverWalletJpaEntity() {}
 
-    public DriverWalletJpaEntity(Long id, Long driverId, BigDecimal availableBalance, BigDecimal pendingEscrowBalance, String currency, Instant createdAt, Instant updatedAt) {
+    public DriverWalletJpaEntity(Long id, String driverPrincipalId, BigDecimal availableBalance, BigDecimal pendingEscrowBalance, String currency, Instant createdAt, Instant updatedAt) {
         this.id = id;
-        this.driverId = driverId;
+        this.driverPrincipalId = driverPrincipalId;
         this.availableBalance = availableBalance;
         this.pendingEscrowBalance = pendingEscrowBalance;
         this.currency = currency;
@@ -42,7 +42,7 @@ public class DriverWalletJpaEntity {
     }
 
     public Long getId() { return id; }
-    public Long getDriverId() { return driverId; }
+    public String getDriverPrincipalId() { return driverPrincipalId; }
     public BigDecimal getAvailableBalance() { return availableBalance; }
     public BigDecimal getPendingEscrowBalance() { return pendingEscrowBalance; }
     public String getCurrency() { return currency; }

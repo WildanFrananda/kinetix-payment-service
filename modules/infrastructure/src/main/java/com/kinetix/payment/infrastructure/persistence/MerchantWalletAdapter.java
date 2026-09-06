@@ -14,8 +14,8 @@ public class MerchantWalletAdapter implements MerchantWalletRepositoryPort {
     }
 
     @Override
-    public Optional<MerchantWallet> findByMerchantId(Long merchantId) {
-        return jpaRepository.findByMerchantId(merchantId)
+    public Optional<MerchantWallet> findByMerchantPrincipalId(String merchantPrincipalId) {
+        return jpaRepository.findByMerchantPrincipalId(merchantPrincipalId)
             .map(this::toDomain);
     }
 
@@ -23,7 +23,7 @@ public class MerchantWalletAdapter implements MerchantWalletRepositoryPort {
     public MerchantWallet save(MerchantWallet wallet) {
         MerchantWalletJpaEntity entity = new MerchantWalletJpaEntity(
             wallet.id(),
-            wallet.merchantId(),
+            wallet.merchantPrincipalId(),
             wallet.availableBalance(),
             wallet.pendingEscrowBalance(),
             wallet.currency(),
@@ -37,7 +37,7 @@ public class MerchantWalletAdapter implements MerchantWalletRepositoryPort {
     private MerchantWallet toDomain(MerchantWalletJpaEntity entity) {
         return new MerchantWallet(
             entity.getId(),
-            entity.getMerchantId(),
+            entity.getMerchantPrincipalId(),
             entity.getAvailableBalance(),
             entity.getPendingEscrowBalance(),
             entity.getCurrency(),

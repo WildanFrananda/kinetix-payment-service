@@ -15,14 +15,14 @@ public class EscrowJpaEntity {
     @Column(name = "order_number", nullable = false, unique = true)
     private String orderNumber;
 
-    @Column(name = "customer_id", nullable = false)
-    private Long customerId;
+    @Column(name = "customer_principal_id", nullable = false)
+    private String customerPrincipalId;
 
-    @Column(name = "merchant_id", nullable = false)
-    private Long merchantId;
+    @Column(name = "merchant_principal_id", nullable = false)
+    private String merchantPrincipalId;
 
-    @Column(name = "driver_id")
-    private Long driverId;
+    @Column(name = "driver_principal_id")
+    private String driverPrincipalId;
 
     @Column(name = "total_order_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalOrderAmount;
@@ -48,12 +48,12 @@ public class EscrowJpaEntity {
 
     public EscrowJpaEntity() {}
 
-    public EscrowJpaEntity(Long id, String orderNumber, Long customerId, Long merchantId, Long driverId, BigDecimal totalOrderAmount, BigDecimal merchantAmount, BigDecimal shippingFeeAmount, EscrowHold.EscrowStatus status, Instant autoReleaseAt, Instant createdAt, Instant releasedAt) {
+    public EscrowJpaEntity(Long id, String orderNumber, String customerPrincipalId, String merchantPrincipalId, String driverPrincipalId, BigDecimal totalOrderAmount, BigDecimal merchantAmount, BigDecimal shippingFeeAmount, EscrowHold.EscrowStatus status, Instant autoReleaseAt, Instant createdAt, Instant releasedAt) {
         this.id = id;
         this.orderNumber = orderNumber;
-        this.customerId = customerId;
-        this.merchantId = merchantId;
-        this.driverId = driverId;
+        this.customerPrincipalId = customerPrincipalId;
+        this.merchantPrincipalId = merchantPrincipalId;
+        this.driverPrincipalId = driverPrincipalId;
         this.totalOrderAmount = totalOrderAmount;
         this.merchantAmount = merchantAmount;
         this.shippingFeeAmount = shippingFeeAmount;
@@ -65,9 +65,9 @@ public class EscrowJpaEntity {
 
     public Long getId() { return id; }
     public String getOrderNumber() { return orderNumber; }
-    public Long getCustomerId() { return customerId; }
-    public Long getMerchantId() { return merchantId; }
-    public Long getDriverId() { return driverId; }
+    public String getCustomerPrincipalId() { return customerPrincipalId; }
+    public String getMerchantPrincipalId() { return merchantPrincipalId; }
+    public String getDriverPrincipalId() { return driverPrincipalId; }
     public BigDecimal getTotalOrderAmount() { return totalOrderAmount; }
     public BigDecimal getMerchantAmount() { return merchantAmount; }
     public BigDecimal getShippingFeeAmount() { return shippingFeeAmount; }

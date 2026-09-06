@@ -5,17 +5,29 @@ import java.time.Instant;
 
 public record DriverWallet(
     Long id,
-    Long driverId,
+    String driverPrincipalId,
     BigDecimal availableBalance,
     BigDecimal pendingEscrowBalance,
     String currency,
     Instant createdAt,
     Instant updatedAt
 ) {
-    public static DriverWallet createInitial(Long driverId) {
+    public DriverWallet {
+        if (driverPrincipalId == null || driverPrincipalId.isBlank()) {
+            throw new IllegalArgumentException("A driver principal id is required");
+        }
+        if (availableBalance.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Available balance cannot be negative");
+        }
+        if (pendingEscrowBalance.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Pending escrow balance cannot be negative");
+        }
+    }
+
+    public static DriverWallet createInitial(String driverPrincipalId) {
         return new DriverWallet(
             null,
-            driverId,
+            driverPrincipalId,
             BigDecimal.ZERO,
             BigDecimal.ZERO,
             "IDR",
@@ -27,7 +39,7 @@ public record DriverWallet(
     public DriverWallet addPendingEscrow(BigDecimal amount) {
         return new DriverWallet(
             id,
-            driverId,
+            driverPrincipalId,
             availableBalance,
             pendingEscrowBalance.add(amount),
             currency,
@@ -39,7 +51,7 @@ public record DriverWallet(
     public DriverWallet releaseEscrowToAvailable(BigDecimal amount) {
         return new DriverWallet(
             id,
-            driverId,
+            driverPrincipalId,
             availableBalance.add(amount),
             pendingEscrowBalance.subtract(amount).max(BigDecimal.ZERO),
             currency,

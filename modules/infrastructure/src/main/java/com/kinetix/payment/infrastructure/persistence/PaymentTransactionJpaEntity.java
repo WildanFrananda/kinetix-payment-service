@@ -18,8 +18,8 @@ public class PaymentTransactionJpaEntity {
     @Column(name = "external_transaction_id")
     private String externalTransactionId;
 
-    @Column(name = "user_id", nullable = false)
-    private Long userId;
+    @Column(name = "principal_id", nullable = false)
+    private String principalId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "type", nullable = false, length = 32)
@@ -44,11 +44,11 @@ public class PaymentTransactionJpaEntity {
 
     public PaymentTransactionJpaEntity() {}
 
-    public PaymentTransactionJpaEntity(Long id, String referenceNumber, String externalTransactionId, Long userId, PaymentTransaction.TransactionType type, PaymentTransaction.PaymentMethod method, BigDecimal amount, PaymentTransaction.TransactionStatus status, String gatewayResponse, Instant createdAt) {
+    public PaymentTransactionJpaEntity(Long id, String referenceNumber, String externalTransactionId, String principalId, PaymentTransaction.TransactionType type, PaymentTransaction.PaymentMethod method, BigDecimal amount, PaymentTransaction.TransactionStatus status, String gatewayResponse, Instant createdAt) {
         this.id = id;
         this.referenceNumber = referenceNumber;
         this.externalTransactionId = externalTransactionId;
-        this.userId = userId;
+        this.principalId = principalId;
         this.type = type;
         this.method = method;
         this.amount = amount;
@@ -60,7 +60,7 @@ public class PaymentTransactionJpaEntity {
     public Long getId() { return id; }
     public String getReferenceNumber() { return referenceNumber; }
     public String getExternalTransactionId() { return externalTransactionId; }
-    public Long getUserId() { return userId; }
+    public String getPrincipalId() { return principalId; }
     public PaymentTransaction.TransactionType getType() { return type; }
     public PaymentTransaction.PaymentMethod getMethod() { return method; }
     public BigDecimal getAmount() { return amount; }

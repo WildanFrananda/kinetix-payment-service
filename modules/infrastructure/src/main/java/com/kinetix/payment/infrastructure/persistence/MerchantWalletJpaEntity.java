@@ -11,8 +11,8 @@ public class MerchantWalletJpaEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "merchant_id", nullable = false, unique = true)
-    private Long merchantId;
+    @Column(name = "merchant_principal_id", nullable = false, unique = true)
+    private String merchantPrincipalId;
 
     @Column(name = "available_balance", nullable = false, precision = 12, scale = 2)
     private BigDecimal availableBalance;
@@ -31,9 +31,9 @@ public class MerchantWalletJpaEntity {
 
     public MerchantWalletJpaEntity() {}
 
-    public MerchantWalletJpaEntity(Long id, Long merchantId, BigDecimal availableBalance, BigDecimal pendingEscrowBalance, String currency, Instant createdAt, Instant updatedAt) {
+    public MerchantWalletJpaEntity(Long id, String merchantPrincipalId, BigDecimal availableBalance, BigDecimal pendingEscrowBalance, String currency, Instant createdAt, Instant updatedAt) {
         this.id = id;
-        this.merchantId = merchantId;
+        this.merchantPrincipalId = merchantPrincipalId;
         this.availableBalance = availableBalance;
         this.pendingEscrowBalance = pendingEscrowBalance;
         this.currency = currency;
@@ -42,7 +42,7 @@ public class MerchantWalletJpaEntity {
     }
 
     public Long getId() { return id; }
-    public Long getMerchantId() { return merchantId; }
+    public String getMerchantPrincipalId() { return merchantPrincipalId; }
     public BigDecimal getAvailableBalance() { return availableBalance; }
     public BigDecimal getPendingEscrowBalance() { return pendingEscrowBalance; }
     public String getCurrency() { return currency; }

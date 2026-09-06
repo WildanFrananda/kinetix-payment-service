@@ -14,8 +14,8 @@ public class DriverWalletAdapter implements DriverWalletRepositoryPort {
     }
 
     @Override
-    public Optional<DriverWallet> findByDriverId(Long driverId) {
-        return jpaRepository.findByDriverId(driverId)
+    public Optional<DriverWallet> findByDriverPrincipalId(String driverPrincipalId) {
+        return jpaRepository.findByDriverPrincipalId(driverPrincipalId)
             .map(this::toDomain);
     }
 
@@ -23,7 +23,7 @@ public class DriverWalletAdapter implements DriverWalletRepositoryPort {
     public DriverWallet save(DriverWallet wallet) {
         DriverWalletJpaEntity entity = new DriverWalletJpaEntity(
             wallet.id(),
-            wallet.driverId(),
+            wallet.driverPrincipalId(),
             wallet.availableBalance(),
             wallet.pendingEscrowBalance(),
             wallet.currency(),
@@ -37,7 +37,7 @@ public class DriverWalletAdapter implements DriverWalletRepositoryPort {
     private DriverWallet toDomain(DriverWalletJpaEntity entity) {
         return new DriverWallet(
             entity.getId(),
-            entity.getDriverId(),
+            entity.getDriverPrincipalId(),
             entity.getAvailableBalance(),
             entity.getPendingEscrowBalance(),
             entity.getCurrency(),

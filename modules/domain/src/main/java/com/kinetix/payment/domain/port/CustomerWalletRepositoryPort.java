@@ -4,6 +4,6 @@ import com.kinetix.payment.domain.entity.CustomerWallet;
 import java.util.Optional;
 
 public interface CustomerWalletRepositoryPort {
-    Optional<CustomerWallet> findByCustomerId(Long customerId);
+    Optional<CustomerWallet> findByCustomerPrincipalId(String customerPrincipalId);
     CustomerWallet save(CustomerWallet wallet);
 }

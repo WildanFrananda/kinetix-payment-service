@@ -32,34 +32,34 @@ public class EscrowService {
 
     public EscrowHold createEscrowHold(
         String orderNumber,
-        Long customerId,
-        Long merchantId,
-        Long driverId,
+        String customerPrincipalId,
+        String merchantPrincipalId,
+        String driverPrincipalId,
         BigDecimal totalOrderAmount,
         BigDecimal merchantAmount,
         BigDecimal shippingFeeAmount
     ) {
-        CustomerWallet wallet = customerWalletRepository.findByCustomerId(customerId)
-            .orElseGet(() -> CustomerWallet.createInitial(customerId));
+        CustomerWallet wallet = customerWalletRepository.findByCustomerPrincipalId(customerPrincipalId)
+            .orElseGet(() -> CustomerWallet.createInitial(customerPrincipalId));
 
         CustomerWallet updatedWallet = wallet.deductForCheckout(totalOrderAmount);
         customerWalletRepository.save(updatedWallet);
 
-        MerchantWallet merchantWallet = merchantWalletRepository.findByMerchantId(merchantId)
-            .orElseGet(() -> MerchantWallet.createInitial(merchantId));
+        MerchantWallet merchantWallet = merchantWalletRepository.findByMerchantPrincipalId(merchantPrincipalId)
+            .orElseGet(() -> MerchantWallet.createInitial(merchantPrincipalId));
         merchantWalletRepository.save(merchantWallet.addPendingEscrow(merchantAmount));
 
-        if (driverId != null && driverId > 0) {
-            DriverWallet driverWallet = driverWalletRepository.findByDriverId(driverId)
-                .orElseGet(() -> DriverWallet.createInitial(driverId));
+        if (driverPrincipalId != null && !driverPrincipalId.isBlank()) {
+            DriverWallet driverWallet = driverWalletRepository.findByDriverPrincipalId(driverPrincipalId)
+                .orElseGet(() -> DriverWallet.createInitial(driverPrincipalId));
             driverWalletRepository.save(driverWallet.addPendingEscrow(shippingFeeAmount));
         }
 
         EscrowHold hold = EscrowHold.createNewHold(
             orderNumber,
-            customerId,
-            merchantId,
-            driverId,
+            customerPrincipalId,
+            merchantPrincipalId,
+            driverPrincipalId,
             totalOrderAmount,
             merchantAmount,
             shippingFeeAmount
@@ -79,13 +79,13 @@ public class EscrowService {
             return hold;
         }
 
-        MerchantWallet merchantWallet = merchantWalletRepository.findByMerchantId(hold.merchantId())
-            .orElseGet(() -> MerchantWallet.createInitial(hold.merchantId()));
+        MerchantWallet merchantWallet = merchantWalletRepository.findByMerchantPrincipalId(hold.merchantPrincipalId())
+            .orElseGet(() -> MerchantWallet.createInitial(hold.merchantPrincipalId()));
         merchantWalletRepository.save(merchantWallet.releaseEscrowToAvailable(hold.merchantAmount()));
 
-        if (hold.driverId() != null && hold.driverId() > 0) {
-            DriverWallet driverWallet = driverWalletRepository.findByDriverId(hold.driverId())
-                .orElseGet(() -> DriverWallet.createInitial(hold.driverId()));
+        if (hold.driverPrincipalId() != null && !hold.driverPrincipalId().isBlank()) {
+            DriverWallet driverWallet = driverWalletRepository.findByDriverPrincipalId(hold.driverPrincipalId())
+                .orElseGet(() -> DriverWallet.createInitial(hold.driverPrincipalId()));
             driverWalletRepository.save(driverWallet.releaseEscrowToAvailable(hold.shippingFeeAmount()));
         }
 

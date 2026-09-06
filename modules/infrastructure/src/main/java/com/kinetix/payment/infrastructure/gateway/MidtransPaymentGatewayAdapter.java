@@ -42,20 +42,20 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
     }
 
     @Override
-    public PaymentTransaction createTopUpTransaction(Long customerId, BigDecimal amount, PaymentTransaction.PaymentMethod method) {
+    public PaymentTransaction createTopUpTransaction(String customerPrincipalId, BigDecimal amount, PaymentTransaction.PaymentMethod method) {
         String refNum = "TOPUP-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-        return executeMidtransCharge(refNum, customerId, amount, PaymentTransaction.TransactionType.TOPUP, method);
+        return executeMidtransCharge(refNum, customerPrincipalId, amount, PaymentTransaction.TransactionType.TOPUP, method);
     }
 
     @Override
-    public PaymentTransaction processCheckoutPayment(String orderNumber, Long customerId, BigDecimal amount, PaymentTransaction.PaymentMethod method) {
+    public PaymentTransaction processCheckoutPayment(String orderNumber, String customerPrincipalId, BigDecimal amount, PaymentTransaction.PaymentMethod method) {
         String refNum = "PAY-" + orderNumber;
-        return executeMidtransCharge(refNum, customerId, amount, PaymentTransaction.TransactionType.CHECKOUT_PAYMENT, method);
+        return executeMidtransCharge(refNum, customerPrincipalId, amount, PaymentTransaction.TransactionType.CHECKOUT_PAYMENT, method);
     }
 
     private PaymentTransaction executeMidtransCharge(
         String referenceNumber,
-        Long userId,
+        String principalId,
         BigDecimal amount,
         PaymentTransaction.TransactionType type,
         PaymentTransaction.PaymentMethod method
@@ -69,8 +69,8 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
                     "gross_amount", amount.longValue()
                 ),
                 "customer_details", Map.of(
-                    "user_id", userId.toString(),
-                    "email", "user" + userId + "@kinetix.shop"
+                    "user_id", principalId.toString(),
+                    "email", "user" + principalId + "@kinetix.shop"
                 )
             );
 
@@ -96,7 +96,7 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
                     null,
                     referenceNumber,
                     extTxId,
-                    userId,
+                    principalId,
                     type,
                     method,
                     amount,
@@ -109,7 +109,7 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
                     null,
                     referenceNumber,
                     null,
-                    userId,
+                    principalId,
                     type,
                     method,
                     amount,
@@ -123,7 +123,7 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
                 null,
                 referenceNumber,
                 null,
-                userId,
+                principalId,
                 type,
                 method,
                 amount,

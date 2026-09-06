@@ -311,3 +311,77 @@ databaseChangeLog:
         constraintName: UC_PAYMENT_TRANSACTIONSREFERENCE_NUMBER_COL
         tableName: payment_transactions
 
+
+# ── S10: payment stops keying on identity's row ids ────────────────────────────────────────────
+#
+# Every actor column here held `uid`, identity's own primary key, copied into payment through the
+# JWT. That made two id spaces mean the same thing in one column: a wallet could not be resolved
+# from any other service, and payment's own gRPC contract — which has asked for
+# customer_principal_id since v1.0.0 — had nothing to answer with and returned "".
+#
+# Three changesets, in order, and the order is the whole design:
+#
+#   -11  add the principal columns, nullable, so existing rows survive the statement
+#   -12  resolve every legacy id through identity and write it in (ResolvePrincipalBackfill)
+#   -13  enforce NOT NULL and uniqueness, then drop the integer columns
+#
+# Splitting -13 from -11 is what makes the backfill safe to have failed: if identity cannot be
+# reached, -12 stops the migration and -13 never runs, so the schema is left in a state the old
+# code still reads. A single changeset that added and enforced in one step would have had to
+# choose between a default principal — which is a shared wallet — and refusing to migrate at all.
+- changeSet:
+    id: s10-principal-keys-11
+    author: kinetix
+    changes:
+    - addColumn:
+        tableName: customer_wallets
+        columns:
+        - column: { name: customer_principal_id, type: VARCHAR(64) }
+    - addColumn:
+        tableName: merchant_wallets
+        columns:
+        - column: { name: merchant_principal_id, type: VARCHAR(64) }
+    - addColumn:
+        tableName: driver_wallets
+        columns:
+        - column: { name: driver_principal_id, type: VARCHAR(64) }
+    - addColumn:
+        tableName: escrow_holds
+        columns:
+        - column: { name: customer_principal_id, type: VARCHAR(64) }
+        - column: { name: merchant_principal_id, type: VARCHAR(64) }
+        - column: { name: driver_principal_id, type: VARCHAR(64) }
+    - addColumn:
+        tableName: payment_transactions
+        columns:
+        - column: { name: principal_id, type: VARCHAR(64) }
+
+- changeSet:
+    id: s10-principal-keys-12
+    author: kinetix
+    changes:
+    - customChange:
+        class: com.kinetix.payment.infrastructure.migration.ResolvePrincipalBackfill
+
+- changeSet:
+    id: s10-principal-keys-13
+    author: kinetix
+    changes:
+    - addNotNullConstraint: { tableName: customer_wallets, columnName: customer_principal_id, columnDataType: VARCHAR(64) }
+    - addNotNullConstraint: { tableName: merchant_wallets, columnName: merchant_principal_id, columnDataType: VARCHAR(64) }
+    - addNotNullConstraint: { tableName: driver_wallets,   columnName: driver_principal_id,   columnDataType: VARCHAR(64) }
+    - addNotNullConstraint: { tableName: escrow_holds,     columnName: customer_principal_id, columnDataType: VARCHAR(64) }
+    - addNotNullConstraint: { tableName: escrow_holds,     columnName: merchant_principal_id, columnDataType: VARCHAR(64) }
+    - addNotNullConstraint: { tableName: payment_transactions, columnName: principal_id,      columnDataType: VARCHAR(64) }
+    # driver_principal_id on escrow_holds stays nullable: a hold exists from checkout, before
+    # matching has assigned anyone to carry the order.
+    - addUniqueConstraint: { tableName: customer_wallets, columnNames: customer_principal_id, constraintName: UC_CUSTOMER_WALLETS_PRINCIPAL }
+    - addUniqueConstraint: { tableName: merchant_wallets, columnNames: merchant_principal_id, constraintName: UC_MERCHANT_WALLETS_PRINCIPAL }
+    - addUniqueConstraint: { tableName: driver_wallets,   columnNames: driver_principal_id,   constraintName: UC_DRIVER_WALLETS_PRINCIPAL }
+    - dropColumn: { tableName: customer_wallets,     columnName: customer_id }
+    - dropColumn: { tableName: merchant_wallets,     columnName: merchant_id }
+    - dropColumn: { tableName: driver_wallets,       columnName: driver_id }
+    - dropColumn: { tableName: escrow_holds,         columnName: customer_id }
+    - dropColumn: { tableName: escrow_holds,         columnName: merchant_id }
+    - dropColumn: { tableName: escrow_holds,         columnName: driver_id }
+    - dropColumn: { tableName: payment_transactions, columnName: user_id }

@@ -14,8 +14,8 @@ public class CustomerWalletAdapter implements CustomerWalletRepositoryPort {
     }
 
     @Override
-    public Optional<CustomerWallet> findByCustomerId(Long customerId) {
-        return jpaRepository.findByCustomerId(customerId)
+    public Optional<CustomerWallet> findByCustomerPrincipalId(String customerPrincipalId) {
+        return jpaRepository.findByCustomerPrincipalId(customerPrincipalId)
             .map(this::toDomain);
     }
 
@@ -23,7 +23,7 @@ public class CustomerWalletAdapter implements CustomerWalletRepositoryPort {
     public CustomerWallet save(CustomerWallet wallet) {
         CustomerWalletJpaEntity entity = new CustomerWalletJpaEntity(
             wallet.id(),
-            wallet.customerId(),
+            wallet.customerPrincipalId(),
             wallet.balance(),
             wallet.heldBalance(),
             wallet.currency(),
@@ -37,7 +37,7 @@ public class CustomerWalletAdapter implements CustomerWalletRepositoryPort {
     private CustomerWallet toDomain(CustomerWalletJpaEntity entity) {
         return new CustomerWallet(
             entity.getId(),
-            entity.getCustomerId(),
+            entity.getCustomerPrincipalId(),
             entity.getBalance(),
             entity.getHeldBalance(),
             entity.getCurrency(),

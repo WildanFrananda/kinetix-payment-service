@@ -7,7 +7,7 @@ public record PaymentTransaction(
     Long id,
     String referenceNumber,
     String externalTransactionId,
-    Long userId,
+    String principalId,
     TransactionType type,
     PaymentMethod method,
     BigDecimal amount,

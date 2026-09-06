@@ -6,9 +6,9 @@ import java.time.Instant;
 public record EscrowHold(
     Long id,
     String orderNumber,
-    Long customerId,
-    Long merchantId,
-    Long driverId,
+    String customerPrincipalId,
+    String merchantPrincipalId,
+    String driverPrincipalId,
     BigDecimal totalOrderAmount,
     BigDecimal merchantAmount,
     BigDecimal shippingFeeAmount,
@@ -17,6 +17,15 @@ public record EscrowHold(
     Instant createdAt,
     Instant releasedAt
 ) {
+    public EscrowHold {
+        if (customerPrincipalId == null || customerPrincipalId.isBlank()) {
+            throw new IllegalArgumentException("A customer principal id is required");
+        }
+        if (merchantPrincipalId == null || merchantPrincipalId.isBlank()) {
+            throw new IllegalArgumentException("A merchant principal id is required");
+        }
+    }
+
     public enum EscrowStatus {
         HELD,
         RELEASED,
@@ -26,9 +35,9 @@ public record EscrowHold(
 
     public static EscrowHold createNewHold(
         String orderNumber,
-        Long customerId,
-        Long merchantId,
-        Long driverId,
+        String customerPrincipalId,
+        String merchantPrincipalId,
+        String driverPrincipalId,
         BigDecimal totalOrderAmount,
         BigDecimal merchantAmount,
         BigDecimal shippingFeeAmount
@@ -36,9 +45,9 @@ public record EscrowHold(
         return new EscrowHold(
             null,
             orderNumber,
-            customerId,
-            merchantId,
-            driverId,
+            customerPrincipalId,
+            merchantPrincipalId,
+            driverPrincipalId,
             totalOrderAmount,
             merchantAmount,
             shippingFeeAmount,
@@ -53,9 +62,9 @@ public record EscrowHold(
         return new EscrowHold(
             id,
             orderNumber,
-            customerId,
-            merchantId,
-            driverId,
+            customerPrincipalId,
+            merchantPrincipalId,
+            driverPrincipalId,
             totalOrderAmount,
             merchantAmount,
             shippingFeeAmount,
