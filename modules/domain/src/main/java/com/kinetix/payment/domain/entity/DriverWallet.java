@@ -48,6 +48,18 @@ public record DriverWallet(
         );
     }
 
+    public DriverWallet cancelPendingEscrow(BigDecimal amount) {
+        return new DriverWallet(
+            id,
+            driverPrincipalId,
+            availableBalance,
+            pendingEscrowBalance.subtract(amount).max(BigDecimal.ZERO),
+            currency,
+            createdAt,
+            Instant.now()
+        );
+    }
+
     public DriverWallet releaseEscrowToAvailable(BigDecimal amount) {
         return new DriverWallet(
             id,

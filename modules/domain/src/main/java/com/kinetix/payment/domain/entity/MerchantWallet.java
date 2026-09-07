@@ -48,6 +48,18 @@ public record MerchantWallet(
         );
     }
 
+    public MerchantWallet cancelPendingEscrow(BigDecimal amount) {
+        return new MerchantWallet(
+            id,
+            merchantPrincipalId,
+            availableBalance,
+            pendingEscrowBalance.subtract(amount).max(BigDecimal.ZERO),
+            currency,
+            createdAt,
+            Instant.now()
+        );
+    }
+
     public MerchantWallet releaseEscrowToAvailable(BigDecimal amount) {
         return new MerchantWallet(
             id,

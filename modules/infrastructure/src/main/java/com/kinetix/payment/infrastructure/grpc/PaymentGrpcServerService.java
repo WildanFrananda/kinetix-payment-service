@@ -56,9 +56,12 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
         Payment.RefundEscrowRequest request,
         StreamObserver<Payment.EscrowHoldResponse> responseObserver
     ) {
-        responseObserver.onError(io.grpc.Status.UNIMPLEMENTED
-            .withDescription("RefundEscrow lands with the saga's compensation in S11")
-            .asRuntimeException());
+        EscrowHold hold = escrowService.refundEscrow(request.getOrderNumber());
+
+        responseObserver.onNext(hold == null
+            ? Payment.EscrowHoldResponse.newBuilder().setFound(false).build()
+            : toResponse(hold));
+        responseObserver.onCompleted();
     }
 
     @Override

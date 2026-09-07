@@ -93,6 +93,41 @@ public class EscrowService {
         return escrowRepository.save(released);
     }
 
+    public EscrowHold refundEscrow(String orderNumber) {
+        EscrowHold hold = escrowRepository.findByOrderNumber(orderNumber).orElse(null);
+        if (hold == null) {
+            return null;
+        }
+
+        if (hold.status() == EscrowHold.EscrowStatus.REFUNDED) {
+            return hold;
+        }
+
+        if (hold.status() == EscrowHold.EscrowStatus.RELEASED) {
+            throw new IllegalStateException(
+                "escrow for order " + orderNumber + " was already released and cannot be refunded here");
+        }
+
+        CustomerWallet customerWallet =
+            customerWalletRepository.findByCustomerPrincipalId(hold.customerPrincipalId())
+                .orElseGet(() -> CustomerWallet.createInitial(hold.customerPrincipalId()));
+        customerWalletRepository.save(customerWallet.topUp(hold.totalOrderAmount()));
+
+        MerchantWallet merchantWallet =
+            merchantWalletRepository.findByMerchantPrincipalId(hold.merchantPrincipalId())
+                .orElseGet(() -> MerchantWallet.createInitial(hold.merchantPrincipalId()));
+        merchantWalletRepository.save(merchantWallet.cancelPendingEscrow(hold.merchantAmount()));
+
+        if (hold.driverPrincipalId() != null && !hold.driverPrincipalId().isBlank()) {
+            DriverWallet driverWallet =
+                driverWalletRepository.findByDriverPrincipalId(hold.driverPrincipalId())
+                    .orElseGet(() -> DriverWallet.createInitial(hold.driverPrincipalId()));
+            driverWalletRepository.save(driverWallet.cancelPendingEscrow(hold.shippingFeeAmount()));
+        }
+
+        return escrowRepository.save(hold.markAsRefunded());
+    }
+
     public void processAutoReleaseJob() {
         List<EscrowHold> pendingHolds = escrowRepository.findPendingAutoReleaseHolds();
         for (EscrowHold hold : pendingHolds) {

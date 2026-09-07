@@ -58,6 +58,23 @@ public record EscrowHold(
         );
     }
 
+    public EscrowHold markAsRefunded() {
+        return new EscrowHold(
+            id,
+            orderNumber,
+            customerPrincipalId,
+            merchantPrincipalId,
+            driverPrincipalId,
+            totalOrderAmount,
+            merchantAmount,
+            shippingFeeAmount,
+            EscrowStatus.REFUNDED,
+            autoReleaseAt,
+            createdAt,
+            Instant.now()
+        );
+    }
+
     public EscrowHold markAsReleased() {
         return new EscrowHold(
             id,
