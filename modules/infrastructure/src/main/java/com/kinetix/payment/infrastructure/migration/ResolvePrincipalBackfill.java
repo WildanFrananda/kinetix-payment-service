@@ -25,7 +25,6 @@ import liquibase.exception.ValidationErrors;
 import liquibase.resource.ResourceAccessor;
 
 public class ResolvePrincipalBackfill implements CustomTaskChange {
-
     private static final List<Column> COLUMNS = List.of(
         new Column("customer_wallets", "customer_id", "customer_principal_id"),
         new Column("merchant_wallets", "merchant_id", "merchant_principal_id"),

@@ -24,6 +24,9 @@ public class PeerAuthorizationInterceptor implements ServerInterceptor {
 
     private static final Logger LOG = LoggerFactory.getLogger(PeerAuthorizationInterceptor.class);
 
+    private static final Metadata.Key<String> REQUEST_ID =
+        Metadata.Key.of("x-request-id", Metadata.ASCII_STRING_MARSHALLER);
+
     private final Set<String> allowed;
 
     @SuppressWarnings("null")
@@ -46,10 +49,11 @@ public class PeerAuthorizationInterceptor implements ServerInterceptor {
         ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next
     ) {
         Optional<String> peer = peerService(call);
+        String requestId = requestIdOf(headers);
 
         if (peer.isEmpty()) {
-            LOG.warn("refused a gRPC call to {} from a peer with no SPIFFE identity",
-                call.getMethodDescriptor().getFullMethodName());
+            LOG.warn("refused a gRPC call to {} from a peer with no SPIFFE identity (request_id={})",
+                call.getMethodDescriptor().getFullMethodName(), requestId);
             call.close(Status.UNAUTHENTICATED.withDescription(
                 "a client certificate carrying a SPIFFE id is required"), new Metadata());
             return new ServerCall.Listener<>() {
@@ -58,15 +62,24 @@ public class PeerAuthorizationInterceptor implements ServerInterceptor {
 
         String service = peer.get();
         if (!allowed.contains(service)) {
-            LOG.warn("refused a gRPC call to {} from {}, which is not on the allow list",
-                call.getMethodDescriptor().getFullMethodName(), service);
+            LOG.warn("refused a gRPC call to {} from {}, which is not on the allow list "
+                    + "(request_id={})",
+                call.getMethodDescriptor().getFullMethodName(), service, requestId);
             call.close(Status.PERMISSION_DENIED.withDescription(
                 "service '" + service + "' may not call this server"), new Metadata());
             return new ServerCall.Listener<>() {
             };
         }
 
+        LOG.info("gRPC {} from {} (request_id={})",
+            call.getMethodDescriptor().getFullMethodName(), service, requestId);
+
         return next.startCall(call, headers);
+    }
+
+    private String requestIdOf(Metadata headers) {
+        String value = headers.get(REQUEST_ID);
+        return value == null || value.isBlank() ? "-" : value;
     }
 
     private Optional<String> peerService(ServerCall<?, ?> call) {

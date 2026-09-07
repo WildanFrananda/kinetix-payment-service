@@ -29,6 +29,12 @@ midtrans:
 # The identity service is the only thing on this platform that may sign a token. Every value
 # here is required with no default: a fallback issuer or audience would mean a misconfigured
 # deployment verifies tokens against the wrong authority and reports nothing.
+logging:
+  pattern:
+    # %X{requestId} is what RequestIdFilter puts in the MDC. Empty for work that belongs to no
+    # request — a scheduled sweep, a startup migration — rather than a made-up id.
+    level: "%5p [%X{requestId:-}]"
+
 kinetix:
   jwt:
     jwks-uri: ${IDENTITY_JWKS_URL}

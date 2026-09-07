@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Optional;
 
 public final class SpiffeId {
-
     private static final String TRUST_DOMAIN = "spiffe://kinetix.local/service/";
 
     private static final int URI_SAN = 6;
