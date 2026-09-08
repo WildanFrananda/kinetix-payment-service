@@ -2,6 +2,7 @@ package com.kinetix.payment.infrastructure.persistence;
 
 import com.kinetix.payment.domain.entity.PaymentTransaction;
 import com.kinetix.payment.domain.port.PaymentTransactionRepositoryPort;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import java.util.Optional;
 
@@ -33,8 +34,11 @@ public class PaymentTransactionAdapter implements PaymentTransactionRepositoryPo
             tx.gatewayResponse(),
             tx.createdAt()
         );
-        PaymentTransactionJpaEntity saved = jpaRepository.save(entity);
-        return toDomain(saved);
+        try {
+            return toDomain(jpaRepository.saveAndFlush(entity));
+        } catch (DataIntegrityViolationException violation) {
+            throw ConstraintViolationTranslator.translate(violation);
+        }
     }
 
     private PaymentTransaction toDomain(PaymentTransactionJpaEntity entity) {

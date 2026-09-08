@@ -4,6 +4,8 @@ import com.kinetix.payment.api.dto.CheckoutPaymentRequest;
 import com.kinetix.payment.api.dto.EscrowResponse;
 import com.kinetix.payment.api.security.AccessClaims;
 import com.kinetix.payment.api.security.ForbiddenException;
+import com.kinetix.payment.application.CreateEscrowHoldCommand;
+import com.kinetix.payment.application.EscrowRequestFingerprint;
 import com.kinetix.payment.application.EscrowService;
 import com.kinetix.payment.domain.entity.EscrowHold;
 import jakarta.validation.Valid;
@@ -32,15 +34,24 @@ public class PaymentController {
             throw new ForbiddenException("only a customer account can pay for an order");
         }
 
-        EscrowHold hold = escrowService.createEscrowHold(
+        EscrowHold hold = escrowService.createEscrowHold(new CreateEscrowHoldCommand(
             request.orderNumber(),
             caller.principalId(),
             request.merchantPrincipalId(),
             request.driverPrincipalId(),
             request.totalOrderAmount(),
             request.merchantAmount(),
-            request.shippingFeeAmount()
-        );
+            request.shippingFeeAmount(),
+            null,
+            EscrowRequestFingerprint.forCreateHold(
+                request.orderNumber(),
+                caller.principalId(),
+                request.merchantPrincipalId(),
+                request.driverPrincipalId(),
+                request.totalOrderAmount(),
+                request.merchantAmount(),
+                request.shippingFeeAmount())
+        )).hold();
         return ResponseEntity.status(HttpStatus.CREATED).body(EscrowResponse.from(hold));
     }
 }

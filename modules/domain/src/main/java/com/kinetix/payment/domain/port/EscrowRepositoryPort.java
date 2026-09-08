@@ -6,6 +6,10 @@ import java.util.Optional;
 
 public interface EscrowRepositoryPort {
     Optional<EscrowHold> findByOrderNumber(String orderNumber);
+
+    Optional<EscrowHold> findByOrderNumberForUpdate(String orderNumber);
+
     List<EscrowHold> findPendingAutoReleaseHolds();
+
     EscrowHold save(EscrowHold escrowHold);
 }

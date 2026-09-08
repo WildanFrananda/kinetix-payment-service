@@ -31,7 +31,7 @@ public class EscrowController {
             throw new ForbiddenException("releasing an escrow hold is an administrative action");
         }
 
-        EscrowHold released = escrowService.releaseEscrow(request.orderNumber());
+        EscrowHold released = escrowService.releaseEscrow(request.orderNumber()).hold();
         return ResponseEntity.ok(EscrowResponse.from(released));
     }
 }

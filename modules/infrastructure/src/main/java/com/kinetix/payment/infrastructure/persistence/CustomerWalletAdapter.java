@@ -20,6 +20,12 @@ public class CustomerWalletAdapter implements CustomerWalletRepositoryPort {
     }
 
     @Override
+    public Optional<CustomerWallet> findByCustomerPrincipalIdForUpdate(String customerPrincipalId) {
+        return jpaRepository.findByCustomerPrincipalIdForUpdate(customerPrincipalId)
+            .map(this::toDomain);
+    }
+
+    @Override
     public CustomerWallet save(CustomerWallet wallet) {
         CustomerWalletJpaEntity entity = new CustomerWalletJpaEntity(
             wallet.id(),

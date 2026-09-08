@@ -1,8 +1,10 @@
 package com.kinetix.payment.infrastructure.grpc;
 
+import io.grpc.ForwardingServerCallListener;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
@@ -14,18 +16,21 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLPeerUnverifiedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import net.devh.boot.grpc.server.interceptor.GrpcGlobalServerInterceptor;
 
 @GrpcGlobalServerInterceptor
 public class PeerAuthorizationInterceptor implements ServerInterceptor {
-
     private static final Logger LOG = LoggerFactory.getLogger(PeerAuthorizationInterceptor.class);
 
     private static final Metadata.Key<String> REQUEST_ID =
         Metadata.Key.of("x-request-id", Metadata.ASCII_STRING_MARSHALLER);
+
+    private static final String MDC_REQUEST_ID = "requestId";
 
     private final Set<String> allowed;
 
@@ -39,13 +44,14 @@ public class PeerAuthorizationInterceptor implements ServerInterceptor {
         if (allowed.isEmpty()) {
             throw new IllegalStateException(
                 "kinetix.grpc.allowed-callers is empty. Name the services permitted to call this "
-                    + "server, or the gRPC surface is unreachable.");
+                    + "server, or the gRPC surface is unreachable."
+                );
         }
         LOG.info("gRPC callers allowed on this server: {}", allowed);
     }
 
     @Override
-    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+    public <ReqT, RespT> Listener<ReqT> interceptCall(
         ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next
     ) {
         Optional<String> peer = peerService(call);
@@ -53,28 +59,55 @@ public class PeerAuthorizationInterceptor implements ServerInterceptor {
 
         if (peer.isEmpty()) {
             LOG.warn("refused a gRPC call to {} from a peer with no SPIFFE identity (request_id={})",
-                call.getMethodDescriptor().getFullMethodName(), requestId);
+                call.getMethodDescriptor().getFullMethodName(), requestId
+            );
             call.close(Status.UNAUTHENTICATED.withDescription(
-                "a client certificate carrying a SPIFFE id is required"), new Metadata());
-            return new ServerCall.Listener<>() {
-            };
+                "a client certificate carrying a SPIFFE id is required"
+            ), new Metadata());
+            return new Listener<>() {};
         }
 
         String service = peer.get();
         if (!allowed.contains(service)) {
             LOG.warn("refused a gRPC call to {} from {}, which is not on the allow list "
                     + "(request_id={})",
-                call.getMethodDescriptor().getFullMethodName(), service, requestId);
+                call.getMethodDescriptor().getFullMethodName(), service, requestId
+            );
             call.close(Status.PERMISSION_DENIED.withDescription(
-                "service '" + service + "' may not call this server"), new Metadata());
-            return new ServerCall.Listener<>() {
-            };
+                "service '" + service + "' may not call this server"), new Metadata()
+            );
+            return new Listener<>() {};
         }
 
         LOG.info("gRPC {} from {} (request_id={})",
             call.getMethodDescriptor().getFullMethodName(), service, requestId);
 
-        return next.startCall(call, headers);
+        return withRequestId(next.startCall(call, headers), requestId);
+    }
+
+    private <ReqT> Listener<ReqT> withRequestId(
+        Listener<ReqT> delegate, String requestId
+    ) {
+        return new ForwardingServerCallListener.SimpleForwardingServerCallListener<>(delegate) {
+            @Override
+            public void onMessage(ReqT message) {
+                runWithRequestId(() -> super.onMessage(message));
+            }
+
+            @Override
+            public void onHalfClose() {
+                runWithRequestId(super::onHalfClose);
+            }
+
+            private void runWithRequestId(Runnable work) {
+                MDC.put(MDC_REQUEST_ID, requestId);
+                try {
+                    work.run();
+                } finally {
+                    MDC.remove(MDC_REQUEST_ID);
+                }
+            }
+        };
     }
 
     private String requestIdOf(Metadata headers) {
@@ -91,7 +124,7 @@ public class PeerAuthorizationInterceptor implements ServerInterceptor {
         Certificate[] chain;
         try {
             chain = session.getPeerCertificates();
-        } catch (javax.net.ssl.SSLPeerUnverifiedException unverified) {
+        } catch (SSLPeerUnverifiedException unverified) {
             return Optional.empty();
         }
         if (chain.length == 0 || !(chain[0] instanceof X509Certificate leaf)) {

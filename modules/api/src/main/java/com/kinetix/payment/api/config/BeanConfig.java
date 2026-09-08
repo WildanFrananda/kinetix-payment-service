@@ -19,9 +19,16 @@ public class BeanConfig {
     public WalletService walletService(
         CustomerWalletRepositoryPort customerWalletRepository,
         MerchantWalletRepositoryPort merchantWalletRepository,
-        DriverWalletRepositoryPort driverWalletRepository
+        DriverWalletRepositoryPort driverWalletRepository,
+        TransactionRunnerPort transactionRunner,
+        AdvisoryLockPort advisoryLock
     ) {
-        return new WalletService(customerWalletRepository, merchantWalletRepository, driverWalletRepository);
+        return new WalletService(
+            customerWalletRepository,
+            merchantWalletRepository,
+            driverWalletRepository,
+            transactionRunner,
+            advisoryLock);
     }
 
     @Bean
@@ -29,9 +36,21 @@ public class BeanConfig {
         EscrowRepositoryPort escrowRepository,
         CustomerWalletRepositoryPort customerWalletRepository,
         MerchantWalletRepositoryPort merchantWalletRepository,
-        DriverWalletRepositoryPort driverWalletRepository
+        DriverWalletRepositoryPort driverWalletRepository,
+        PaymentTransactionRepositoryPort paymentTransactionRepository,
+        EscrowIdempotencyRepositoryPort idempotencyRepository,
+        TransactionRunnerPort transactionRunner,
+        AdvisoryLockPort advisoryLock
     ) {
-        return new EscrowService(escrowRepository, customerWalletRepository, merchantWalletRepository, driverWalletRepository);
+        return new EscrowService(
+            escrowRepository,
+            customerWalletRepository,
+            merchantWalletRepository,
+            driverWalletRepository,
+            paymentTransactionRepository,
+            idempotencyRepository,
+            transactionRunner,
+            advisoryLock);
     }
 
     @Bean

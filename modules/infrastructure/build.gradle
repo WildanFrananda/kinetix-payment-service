@@ -29,6 +29,10 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 
+tasks.named('bootJar') {
+    enabled = false
+}
+
 protobuf {
     protoc {
         artifact = "com.google.protobuf:protoc:3.25.5"

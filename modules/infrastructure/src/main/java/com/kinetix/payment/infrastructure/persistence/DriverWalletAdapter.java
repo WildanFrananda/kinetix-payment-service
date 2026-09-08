@@ -20,6 +20,12 @@ public class DriverWalletAdapter implements DriverWalletRepositoryPort {
     }
 
     @Override
+    public Optional<DriverWallet> findByDriverPrincipalIdForUpdate(String driverPrincipalId) {
+        return jpaRepository.findByDriverPrincipalIdForUpdate(driverPrincipalId)
+            .map(this::toDomain);
+    }
+
+    @Override
     public DriverWallet save(DriverWallet wallet) {
         DriverWalletJpaEntity entity = new DriverWalletJpaEntity(
             wallet.id(),

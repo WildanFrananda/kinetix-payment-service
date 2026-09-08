@@ -20,6 +20,12 @@ public class MerchantWalletAdapter implements MerchantWalletRepositoryPort {
     }
 
     @Override
+    public Optional<MerchantWallet> findByMerchantPrincipalIdForUpdate(String merchantPrincipalId) {
+        return jpaRepository.findByMerchantPrincipalIdForUpdate(merchantPrincipalId)
+            .map(this::toDomain);
+    }
+
+    @Override
     public MerchantWallet save(MerchantWallet wallet) {
         MerchantWalletJpaEntity entity = new MerchantWalletJpaEntity(
             wallet.id(),

@@ -5,5 +5,8 @@ import java.util.Optional;
 
 public interface MerchantWalletRepositoryPort {
     Optional<MerchantWallet> findByMerchantPrincipalId(String merchantPrincipalId);
+
+    Optional<MerchantWallet> findByMerchantPrincipalIdForUpdate(String merchantPrincipalId);
+
     MerchantWallet save(MerchantWallet wallet);
 }

@@ -5,5 +5,8 @@ import java.util.Optional;
 
 public interface CustomerWalletRepositoryPort {
     Optional<CustomerWallet> findByCustomerPrincipalId(String customerPrincipalId);
+
+    Optional<CustomerWallet> findByCustomerPrincipalIdForUpdate(String customerPrincipalId);
+
     CustomerWallet save(CustomerWallet wallet);
 }

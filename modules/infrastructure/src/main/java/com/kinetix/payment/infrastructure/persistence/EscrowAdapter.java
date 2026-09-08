@@ -2,6 +2,7 @@ package com.kinetix.payment.infrastructure.persistence;
 
 import com.kinetix.payment.domain.entity.EscrowHold;
 import com.kinetix.payment.domain.port.EscrowRepositoryPort;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.util.List;
@@ -18,6 +19,12 @@ public class EscrowAdapter implements EscrowRepositoryPort {
     @Override
     public Optional<EscrowHold> findByOrderNumber(String orderNumber) {
         return jpaRepository.findByOrderNumber(orderNumber)
+            .map(this::toDomain);
+    }
+
+    @Override
+    public Optional<EscrowHold> findByOrderNumberForUpdate(String orderNumber) {
+        return jpaRepository.findByOrderNumberForUpdate(orderNumber)
             .map(this::toDomain);
     }
 
@@ -45,8 +52,11 @@ public class EscrowAdapter implements EscrowRepositoryPort {
             hold.createdAt(),
             hold.releasedAt()
         );
-        EscrowJpaEntity saved = jpaRepository.save(entity);
-        return toDomain(saved);
+        try {
+            return toDomain(jpaRepository.saveAndFlush(entity));
+        } catch (DataIntegrityViolationException violation) {
+            throw ConstraintViolationTranslator.translate(violation);
+        }
     }
 
     private EscrowHold toDomain(EscrowJpaEntity entity) {
