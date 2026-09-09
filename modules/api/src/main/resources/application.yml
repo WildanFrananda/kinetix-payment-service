@@ -1,9 +1,23 @@
 server:
   port: ${PORT:8003}
+  # On SIGTERM Tomcat stops accepting and lets already-dispatched requests finish. The budget is
+  # compose's stop_grace_period, 30s: the gRPC server drains first for up to 10s (see
+  # grpc.server.shutdown-grace-period), then this phase gets up to 15s, and the rest is context
+  # teardown. Sum them before changing either — past 30s Docker sends SIGKILL and nothing drains.
+  shutdown: graceful
 
 spring:
   application:
     name: kinetix-payment-service
+  lifecycle:
+    timeout-per-shutdown-phase: 15s
+  autoconfigure:
+    exclude:
+      # net.devh registers its own gRPC meters the moment a MeterRegistry bean exists, under
+      # grpc.server.* names, plus the A66 stream tracers. Two vocabularies for one thing is the
+      # exact failure the metric contract exists to prevent, so calls are counted in
+      # GrpcServerMetricsInterceptor and nowhere else.
+      - net.devh.boot.grpc.server.autoconfigure.GrpcServerMetricAutoConfiguration
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -30,7 +44,14 @@ midtrans:
 # here is required with no default: a fallback issuer or audience would mean a misconfigured
 # deployment verifies tokens against the wrong authority and reports nothing.
 logging:
+  structured:
+    format:
+      # One JSON object per line on stdout. JsonLogFormatter reads the same MDC that
+      # RequestIdFilter and PeerAuthorizationInterceptor already write and publishes it as
+      # "request_id"; there is one carrier of the id in this process, not two.
+      console: com.kinetix.payment.api.observability.JsonLogFormatter
   pattern:
+    # The console falls back to this only if the structured format above is cleared.
     # %X{requestId} is what RequestIdFilter puts in the MDC. Empty for work that belongs to no
     # request — a scheduled sweep, a startup migration — rather than a made-up id.
     level: "%5p [%X{requestId:-}]"
@@ -51,6 +72,10 @@ grpc:
     # No default. compose declares GRPC_PORT for this service, and a fallback here would let the
     # topology and the process bind different ports with nothing reporting it.
     port: ${GRPC_PORT}
+    # Server.shutdown() first: new calls are refused with UNAVAILABLE while calls already started
+    # run to completion. Anything still running after this is ended by shutdownNow(), which fails
+    # it with UNAVAILABLE rather than leaving the caller waiting on a socket that is about to go.
+    shutdown-grace-period: 10s
     security:
       enabled: true
       certificateChain: file:${KINETIX_PKI_DIR:/pki}/tls.crt

@@ -54,12 +54,26 @@ public class PeerAuthorizationInterceptor implements ServerInterceptor {
     public <ReqT, RespT> Listener<ReqT> interceptCall(
         ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next
     ) {
-        Optional<String> peer = peerService(call);
         String requestId = requestIdOf(headers);
+        if (requestId != null) {
+            MDC.put(MDC_REQUEST_ID, requestId);
+        }
+        try {
+            return authorize(call, headers, next, requestId);
+        } finally {
+            MDC.remove(MDC_REQUEST_ID);
+        }
+    }
+
+    private <ReqT, RespT> Listener<ReqT> authorize(
+        ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next,
+        String requestId
+    ) {
+        Optional<String> peer = peerService(call);
 
         if (peer.isEmpty()) {
-            LOG.warn("refused a gRPC call to {} from a peer with no SPIFFE identity (request_id={})",
-                call.getMethodDescriptor().getFullMethodName(), requestId
+            LOG.warn("refused a gRPC call to {} from a peer with no SPIFFE identity",
+                call.getMethodDescriptor().getFullMethodName()
             );
             call.close(Status.UNAUTHENTICATED.withDescription(
                 "a client certificate carrying a SPIFFE id is required"
@@ -69,9 +83,8 @@ public class PeerAuthorizationInterceptor implements ServerInterceptor {
 
         String service = peer.get();
         if (!allowed.contains(service)) {
-            LOG.warn("refused a gRPC call to {} from {}, which is not on the allow list "
-                    + "(request_id={})",
-                call.getMethodDescriptor().getFullMethodName(), service, requestId
+            LOG.warn("refused a gRPC call to {} from {}, which is not on the allow list",
+                call.getMethodDescriptor().getFullMethodName(), service
             );
             call.close(Status.PERMISSION_DENIED.withDescription(
                 "service '" + service + "' may not call this server"), new Metadata()
@@ -79,8 +92,7 @@ public class PeerAuthorizationInterceptor implements ServerInterceptor {
             return new Listener<>() {};
         }
 
-        LOG.info("gRPC {} from {} (request_id={})",
-            call.getMethodDescriptor().getFullMethodName(), service, requestId);
+        LOG.info("gRPC {} from {}", call.getMethodDescriptor().getFullMethodName(), service);
 
         return withRequestId(next.startCall(call, headers), requestId);
     }
@@ -88,6 +100,9 @@ public class PeerAuthorizationInterceptor implements ServerInterceptor {
     private <ReqT> Listener<ReqT> withRequestId(
         Listener<ReqT> delegate, String requestId
     ) {
+        if (requestId == null) {
+            return delegate;
+        }
         return new ForwardingServerCallListener.SimpleForwardingServerCallListener<>(delegate) {
             @Override
             public void onMessage(ReqT message) {
@@ -112,7 +127,7 @@ public class PeerAuthorizationInterceptor implements ServerInterceptor {
 
     private String requestIdOf(Metadata headers) {
         String value = headers.get(REQUEST_ID);
-        return value == null || value.isBlank() ? "-" : value;
+        return value == null || value.isBlank() ? null : value;
     }
 
     private Optional<String> peerService(ServerCall<?, ?> call) {

@@ -23,7 +23,6 @@ import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
-
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         return http
@@ -31,10 +30,13 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(routes -> routes
                 .requestMatchers("/health", "/health/**").permitAll()
-                .anyRequest().authenticated())
+                .requestMatchers("/metrics").permitAll()
+                .anyRequest().authenticated()
+            )
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
             .exceptionHandling(handling -> handling
-                .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+                .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
+            )
             .build();
     }
 
@@ -50,8 +52,9 @@ public class SecurityConfig {
 
         OAuth2TokenValidator<Jwt> validators = new DelegatingOAuth2TokenValidator<>(List.of(
             JwtValidators.createDefaultWithIssuer(issuer),
-            new JwtClaimValidator<List<String>>("aud",
-                aud -> aud != null && aud.contains(audience)),
+            new JwtClaimValidator<List<String>>(
+                "aud", aud -> aud != null && aud.contains(audience)
+            ),
             new TokenUseValidator()
         ));
         decoder.setJwtValidator(validators);

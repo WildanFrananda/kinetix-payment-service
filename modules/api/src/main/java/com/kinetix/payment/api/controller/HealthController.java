@@ -1,5 +1,6 @@
 package com.kinetix.payment.api.controller;
 
+import com.kinetix.payment.api.lifecycle.ShutdownState;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.util.Map;
@@ -15,8 +16,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class HealthController {
     private final DataSource dataSource;
 
-    public HealthController(DataSource dataSource) {
+    private final ShutdownState shutdownState;
+
+    public HealthController(DataSource dataSource, ShutdownState shutdownState) {
         this.dataSource = dataSource;
+        this.shutdownState = shutdownState;
     }
 
     @GetMapping
@@ -26,6 +30,11 @@ public class HealthController {
 
     @GetMapping("/ready")
     public ResponseEntity<Map<String, String>> ready() {
+        if (shutdownState.isDraining()) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Map.of("status", "draining"));
+        }
+
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
             statement.execute("SELECT 1");

@@ -18,6 +18,8 @@ dependencies {
 
     implementation 'org.liquibase:liquibase-core'
 
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 
@@ -52,4 +54,8 @@ tasks.matching { it.name.equalsIgnoreCase('diffChangeLog') || it.name.equalsIgno
 
 application {
     mainClass = 'com.kinetix.payment.api.PaymentApplication'
+}
+
+springBoot {
+    buildInfo()
 }
