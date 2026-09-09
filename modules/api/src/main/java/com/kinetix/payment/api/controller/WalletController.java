@@ -32,13 +32,14 @@ public class WalletController {
     }
 
     @PostMapping("/customer/topup")
-    public ResponseEntity<WalletResponse> topUpCustomer(
+    @ResponseStatus(HttpStatus.CREATED)
+    public WalletResponse topUpCustomer(
         @AuthenticationPrincipal Jwt jwt,
         @Valid @RequestBody TopUpRequest request
     ) {
         AccessClaims caller = require(jwt, AccessClaims.CUSTOMER);
         CustomerWallet wallet = walletService.topUpCustomerWallet(caller.principalId(), request.amount());
-        return ResponseEntity.status(HttpStatus.CREATED).body(WalletResponse.fromCustomer(wallet));
+        return WalletResponse.fromCustomer(wallet);
     }
 
     @GetMapping("/merchant/balance")
@@ -59,7 +60,8 @@ public class WalletController {
         AccessClaims caller = AccessClaims.of(jwt);
         if (!caller.mayActOn(role, caller.principalId())) {
             throw new ForbiddenException(
-                "this account is a " + caller.role() + " and holds no " + role + " wallet");
+                "this account is a " + caller.role() + " and holds no " + role + " wallet"
+            );
         }
         return caller;
     }

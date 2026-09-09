@@ -20,7 +20,11 @@ public class ShutdownState {
     @EventListener
     public void onContextClosed(ContextClosedEvent closed) {
         if (draining.compareAndSet(false, true)) {
-            LOG.info("shutting down: refusing new work, draining what is already in flight");
+            LOG.info(
+                "shutting down: readiness now answers draining, so a load balancer can take this "
+                    + "instance out. New HTTP requests are still accepted until the connector is "
+                    + "paused later in shutdown; work already in flight is being drained."
+            );
         }
     }
 }

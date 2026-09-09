@@ -20,9 +20,9 @@ import org.springframework.web.servlet.HandlerMapping;
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
 public class HttpRequestMetricsFilter extends OncePerRequestFilter {
-    static final String REQUESTS = "kinetix.http.requests";
+    private static final String REQUESTS = "kinetix.http.requests";
 
-    static final String REQUESTS_HELP =
+    private static final String REQUESTS_HELP =
         "HTTP requests this service has answered, by route and status.";
 
     private static final String DURATION = "kinetix.http.request.duration";
@@ -52,30 +52,43 @@ public class HttpRequestMetricsFilter extends OncePerRequestFilter {
         long startedAt = System.nanoTime();
         try {
             chain.doFilter(request, response);
-        } finally {
-            record(request, response, System.nanoTime() - startedAt);
+        } catch (Throwable failure) {
+            record(request, System.nanoTime() - startedAt, statusAfterFailure(response));
+            throw failure;
         }
+        record(request, System.nanoTime() - startedAt, response.getStatus());
     }
 
-    private void record(HttpServletRequest request, HttpServletResponse response, long elapsed) {
+    private static int statusAfterFailure(HttpServletResponse response) {
+        return response.isCommitted()
+            ? response.getStatus()
+            : HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
+    }
+
+    private void record(HttpServletRequest request, long elapsed, int status) {
         String method = methodOf(request);
         String route = routeOf(request);
 
-        Timer.builder(DURATION)
+        duration(registry, method, route).record(elapsed, TimeUnit.NANOSECONDS);
+        requests(registry, method, route, Integer.toString(status)).increment();
+    }
+
+    static Timer duration(MeterRegistry registry, String method, String route) {
+        return Timer.builder(DURATION)
             .description("How long this service took to answer an HTTP request.")
             .serviceLevelObjectives(BUCKETS)
             .tag("method", method)
             .tag("route", route)
-            .register(registry)
-            .record(elapsed, TimeUnit.NANOSECONDS);
+            .register(registry);
+    }
 
-        Counter.builder(REQUESTS)
+    static Counter requests(MeterRegistry registry, String method, String route, String status) {
+        return Counter.builder(REQUESTS)
             .description(REQUESTS_HELP)
             .tag("method", method)
             .tag("route", route)
-            .tag("status", Integer.toString(response.getStatus()))
-            .register(registry)
-            .increment();
+            .tag("status", status)
+            .register(registry);
     }
 
     private static String methodOf(HttpServletRequest request) {
