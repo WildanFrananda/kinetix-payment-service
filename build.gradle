@@ -6,7 +6,7 @@ plugins {
 
 allprojects {
     group = 'com.kinetix.payment'
-    version = '0.0.1-SNAPSHOT'
+    version = project.version == 'unspecified' ? '0.1.0' : project.version
 
     repositories {
         mavenCentral()
