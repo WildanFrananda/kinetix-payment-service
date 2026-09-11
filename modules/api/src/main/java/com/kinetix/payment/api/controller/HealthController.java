@@ -36,7 +36,8 @@ public class HealthController {
         }
 
         try (Connection connection = dataSource.getConnection();
-             Statement statement = connection.createStatement()) {
+             Statement statement = connection.createStatement()
+        ) {
             statement.execute("SELECT 1");
         } catch (Exception exception) {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)

@@ -13,5 +13,6 @@ public interface DriverWalletJpaRepository extends JpaRepository<DriverWalletJpa
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT w FROM DriverWalletJpaEntity w WHERE w.driverPrincipalId = :principalId")
     Optional<DriverWalletJpaEntity> findByDriverPrincipalIdForUpdate(
-        @Param("principalId") String driverPrincipalId);
+        @Param("principalId") String driverPrincipalId
+    );
 }

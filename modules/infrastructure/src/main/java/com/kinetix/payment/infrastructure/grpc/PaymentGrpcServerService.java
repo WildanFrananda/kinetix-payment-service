@@ -30,7 +30,6 @@ import payment.v1.PaymentServiceGrpc;
 
 @GrpcService
 public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceImplBase {
-
     private static final Logger LOG = LoggerFactory.getLogger(PaymentGrpcServerService.class);
 
     private static final BigDecimal MINOR_PER_MAJOR = new BigDecimal("100");
@@ -192,19 +191,10 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
         if (failure instanceof DomainException refused) {
             return refusal(Status.FAILED_PRECONDITION, "ESCROW_REFUSED", refused);
         }
-        // PersistenceException belongs here for a reason worth stating, because its absence was a
-        // real bug: the per-order advisory lock is the FIRST statement of every escrow
-        // transaction, so it is the statement most contention meets — including a compensating
-        // refund blocked behind its own slow create, which is the case this whole design exists
-        // to make safe. PostgresAdvisoryLock issues it through Session.doWork, and a @Component
-        // gets no PersistenceExceptionTranslationPostProcessor proxy, so its timeout surfaces as
-        // a raw org.hibernate.PessimisticLockException and never becomes a DataAccessException.
-        // A row-lock timeout does get translated and lands as PessimisticLockingFailureException.
-        // Two identical waits, two different wire statuses, and the comment below claimed both
-        // were ABORTED. Measured, not reasoned: the mapping was probed on both real exceptions.
         if (failure instanceof DataAccessException
             || failure instanceof TransactionException
-            || failure instanceof PersistenceException) {
+            || failure instanceof PersistenceException
+        ) {
             LOG.warn("escrow call aborted on contention", failure);
             return refusal(Status.ABORTED, "ESCROW_CONTENTION", failure);
         }

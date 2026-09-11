@@ -28,7 +28,8 @@ public class BeanConfig {
             merchantWalletRepository,
             driverWalletRepository,
             transactionRunner,
-            advisoryLock);
+            advisoryLock
+        );
     }
 
     @Bean
@@ -50,7 +51,8 @@ public class BeanConfig {
             paymentTransactionRepository,
             idempotencyRepository,
             transactionRunner,
-            advisoryLock);
+            advisoryLock
+        );
     }
 
     @Bean

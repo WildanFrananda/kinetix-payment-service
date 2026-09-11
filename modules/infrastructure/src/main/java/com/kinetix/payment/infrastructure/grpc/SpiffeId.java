@@ -12,8 +12,7 @@ public final class SpiffeId {
 
     private static final int URI_SAN = 6;
 
-    private SpiffeId() {
-    }
+    private SpiffeId() {}
 
     public static Optional<String> serviceOf(X509Certificate peer) {
         Collection<List<?>> names;

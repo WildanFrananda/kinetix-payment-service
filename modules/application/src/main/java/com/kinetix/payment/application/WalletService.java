@@ -58,7 +58,8 @@ public class WalletService {
                 advisoryLock.lockWalletOwner(merchantPrincipalId);
                 return merchantWalletRepository.findByMerchantPrincipalIdForUpdate(merchantPrincipalId)
                     .orElseGet(() -> merchantWalletRepository.save(
-                        MerchantWallet.createInitial(merchantPrincipalId)));
+                        MerchantWallet.createInitial(merchantPrincipalId)
+                    ));
             }));
     }
 
@@ -68,7 +69,8 @@ public class WalletService {
                 advisoryLock.lockWalletOwner(driverPrincipalId);
                 return driverWalletRepository.findByDriverPrincipalIdForUpdate(driverPrincipalId)
                     .orElseGet(() -> driverWalletRepository.save(
-                        DriverWallet.createInitial(driverPrincipalId)));
+                        DriverWallet.createInitial(driverPrincipalId)
+                    ));
             }));
     }
 }

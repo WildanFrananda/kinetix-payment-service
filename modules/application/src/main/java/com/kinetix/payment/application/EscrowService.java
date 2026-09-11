@@ -169,7 +169,8 @@ public class EscrowService {
     ) {
         EscrowIdempotencyRecord record = idempotencyRepository.save(EscrowIdempotencyRecord.opening(
             EscrowOperation.CREATE_HOLD, key, source, command.orderNumber(),
-            command.requestFingerprint(), null));
+            command.requestFingerprint(), null
+        ));
 
         if (idempotencyRepository.existsFor(EscrowOperation.REFUND, command.orderNumber())) {
             throw new OrderAlreadyUnwoundException("escrow for order " + command.orderNumber()
@@ -277,7 +278,8 @@ public class EscrowService {
         String orderNumber, String key, IdempotencyKeySource source, String fingerprint
     ) {
         EscrowIdempotencyRecord record = idempotencyRepository.save(EscrowIdempotencyRecord.opening(
-            EscrowOperation.RELEASE, key, source, orderNumber, fingerprint, null));
+            EscrowOperation.RELEASE, key, source, orderNumber, fingerprint, null)
+        );
 
         EscrowHold hold = escrowRepository.findByOrderNumberForUpdate(orderNumber)
             .orElseThrow(() -> new EscrowNotFoundException(
@@ -435,7 +437,8 @@ public class EscrowService {
                 + "fingerprint {} at {}, and has now arrived with fingerprint {}; refusing and "
                 + "applying nothing",
             record.idempotencyKey(), record.operation(), record.orderNumber(),
-            record.requestFingerprint(), record.createdAt(), fingerprint);
+            record.requestFingerprint(), record.createdAt(), fingerprint
+        );
         throw new IdempotencyConflictException("idempotency key " + record.idempotencyKey()
             + " was already used for a different " + record.operation() + " request"
         );

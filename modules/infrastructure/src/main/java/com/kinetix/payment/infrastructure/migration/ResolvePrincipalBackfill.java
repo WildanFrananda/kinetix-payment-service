@@ -97,7 +97,8 @@ public class ResolvePrincipalBackfill implements CustomTaskChange {
             .sslContext(GrpcSslContexts.forClient()
                 .trustManager(new File(pki, "ca.pem"))
                 .keyManager(new File(pki, "tls.crt"), new File(pki, "tls.key"))
-                .build())
+                .build()
+            )
             .build();
     }
 
@@ -109,13 +110,16 @@ public class ResolvePrincipalBackfill implements CustomTaskChange {
                 .setServiceLocalId(Identity.ServiceLocalId.newBuilder()
                     .setService("identity")
                     .setLocalId(Long.toString(legacyId))
-                    .build())
-                .build());
+                    .build()
+                )
+                .build()
+            );
 
         if (!response.getFound() || response.getPrincipalId().isBlank()) {
             throw new IllegalStateException(
                 "identity does not know account " + legacyId + ", so the balance held against it "
-                    + "cannot be reached by anyone. Migration stopped with the old columns intact.");
+                    + "cannot be reached by anyone. Migration stopped with the old columns intact."
+            );
         }
         return response.getPrincipalId();
     }
@@ -125,7 +129,8 @@ public class ResolvePrincipalBackfill implements CustomTaskChange {
             + " where " + column.legacy() + " is not null and " + column.principal() + " is null";
         List<Long> ids = new ArrayList<>();
         try (Statement statement = connection.createStatement();
-             ResultSet rows = statement.executeQuery(sql)) {
+             ResultSet rows = statement.executeQuery(sql)
+        ) {
             while (rows.next()) {
                 ids.add(rows.getLong(1));
             }
@@ -133,8 +138,7 @@ public class ResolvePrincipalBackfill implements CustomTaskChange {
         return ids;
     }
 
-    private int apply(Connection connection, Column column, Long legacyId, String principalId)
-        throws Exception {
+    private int apply(Connection connection, Column column, Long legacyId, String principalId) throws Exception {
         String sql = "update " + column.table() + " set " + column.principal() + " = ?"
             + " where " + column.legacy() + " = ? and " + column.principal() + " is null";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
