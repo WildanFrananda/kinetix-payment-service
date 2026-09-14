@@ -3,10 +3,19 @@ package com.kinetix.payment.infrastructure.persistence;
 import com.kinetix.payment.application.CreateEscrowHoldCommand;
 import com.kinetix.payment.application.EscrowRequestFingerprint;
 import com.kinetix.payment.application.EscrowService;
+import com.kinetix.payment.application.TopUpService;
 import com.kinetix.payment.application.WalletService;
 import com.kinetix.payment.domain.entity.CustomerWallet;
 import com.kinetix.payment.domain.entity.EscrowHold;
 import com.kinetix.payment.domain.entity.EscrowOperation;
+import com.kinetix.payment.domain.entity.PaymentTransaction;
+import com.kinetix.payment.domain.gateway.GatewayCharge;
+import com.kinetix.payment.domain.gateway.GatewayChargeRequest;
+import com.kinetix.payment.domain.gateway.GatewayNotification;
+import com.kinetix.payment.domain.gateway.GatewaySettlement;
+import com.kinetix.payment.domain.gateway.GatewayStatus;
+import com.kinetix.payment.domain.gateway.PaymentInstructions;
+import com.kinetix.payment.domain.port.PaymentGatewayPort;
 import com.kinetix.payment.domain.port.TransactionRunnerPort;
 import com.kinetix.payment.domain.port.AdvisoryLockPort;
 import java.math.BigDecimal;
@@ -68,6 +77,44 @@ class ReviewProbeIntegrationTest {
         return new WalletService(customerWalletRepository, merchantWalletRepository,
             driverWalletRepository, transactionRunner, advisoryLock
         );
+    }
+
+    private TopUpService settlementService() {
+        PaymentGatewayPort paidInFull = new PaymentGatewayPort() {
+            @Override
+            public GatewayCharge charge(GatewayChargeRequest request) {
+                throw new UnsupportedOperationException("the probes settle top-ups; they never charge");
+            }
+
+            @Override
+            public GatewayStatus statusOf(String referenceNumber) {
+                BigDecimal amount = paymentTransactionRepository.findByReferenceNumber(referenceNumber)
+                    .map(PaymentTransaction::amount)
+                    .orElseThrow();
+                return new GatewayStatus(GatewaySettlement.SETTLED, amount, "probe-" + referenceNumber, null, null);
+            }
+
+            @Override
+            public PaymentInstructions instructionsFrom(String gatewayResponse) {
+                return PaymentInstructions.none();
+            }
+
+            @Override
+            public boolean isAuthentic(GatewayNotification notification) {
+                return false;
+            }
+        };
+        return new TopUpService(paymentTransactionRepository, customerWalletRepository, paidInFull,
+            transactionRunner, advisoryLock
+        );
+    }
+
+    private String pendingTopUp(String principalId, BigDecimal amount) {
+        String reference = "TOPUP-PROBE-" + UUID.randomUUID();
+        transactionRunner.inNewTransaction(() -> paymentTransactionRepository.save(PaymentTransaction.pendingTopUp(
+            reference, principalId, "probe:" + UUID.randomUUID(), PaymentTransaction.PaymentMethod.MIDTRANS_VA, amount
+        )));
+        return reference;
     }
 
     @Test
@@ -177,7 +224,7 @@ class ReviewProbeIntegrationTest {
     @Test
     void concurrentTopUpsNeverEraseAnEscrowDebit() throws Exception {
         EscrowService escrow = escrow();
-        WalletService wallets = wallets();
+        TopUpService settlements = settlementService();
         String customer = principal();
         String merchant = principal();
         String order = "PROBE-" + UUID.randomUUID();
@@ -185,14 +232,19 @@ class ReviewProbeIntegrationTest {
 
         int topUps = 20;
         BigDecimal each = new BigDecimal("1000.00");
+        List<String> pendingTopUps = new ArrayList<>();
+        for (int i = 0; i < topUps; i++) {
+            pendingTopUps.add(pendingTopUp(customer, each));
+        }
         CyclicBarrier gate = new CyclicBarrier(topUps + 1);
         ExecutorService pool = Executors.newFixedThreadPool(topUps + 1);
         List<Future<?>> running = new ArrayList<>();
         try {
             for (int i = 0; i < topUps; i++) {
+                String reference = pendingTopUps.get(i);
                 running.add(pool.submit(() -> {
                     gate.await(10, TimeUnit.SECONDS);
-                    return wallets.topUpCustomerWallet(customer, each);
+                    return settlements.settle(reference);
                 }));
             }
             Future<?> debit = pool.submit(() -> {
@@ -226,6 +278,7 @@ class ReviewProbeIntegrationTest {
     void mixedTrafficOverSharedWalletsNeverDeadlocks() throws Exception {
         EscrowService escrow = escrow();
         WalletService wallets = wallets();
+        TopUpService settlements = settlementService();
         String[] customers = {principal(), principal(), principal()};
         String[] merchants = {principal(), principal()};
         String[] drivers = {principal(), principal()};
@@ -271,7 +324,7 @@ class ReviewProbeIntegrationTest {
                                     ));
                                     escrow.refundEscrow(order, "cancel", "f-" + order);
                                 }
-                                case 2 -> wallets.topUpCustomerWallet(c, new BigDecimal("500.00"));
+                                case 2 -> settlements.settle(pendingTopUp(c, new BigDecimal("500.00")));
                                 default -> {
                                     wallets.getMerchantWallet(m);
                                     wallets.getDriverWallet(d);

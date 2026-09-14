@@ -21,6 +21,18 @@ public class PaymentTransactionAdapter implements PaymentTransactionRepositoryPo
     }
 
     @Override
+    public Optional<PaymentTransaction> findByReferenceNumberForUpdate(String referenceNumber) {
+        return jpaRepository.findByReferenceNumberForUpdate(referenceNumber)
+            .map(this::toDomain);
+    }
+
+    @Override
+    public Optional<PaymentTransaction> findByPrincipalIdAndIdempotencyKey(String principalId, String idempotencyKey) {
+        return jpaRepository.findByPrincipalIdAndIdempotencyKey(principalId, idempotencyKey)
+            .map(this::toDomain);
+    }
+
+    @Override
     public PaymentTransaction save(PaymentTransaction tx) {
         PaymentTransactionJpaEntity entity = new PaymentTransactionJpaEntity(
             tx.id(),
@@ -32,7 +44,8 @@ public class PaymentTransactionAdapter implements PaymentTransactionRepositoryPo
             tx.amount(),
             tx.status(),
             tx.gatewayResponse(),
-            tx.createdAt()
+            tx.createdAt(),
+            tx.idempotencyKey()
         );
         try {
             return toDomain(jpaRepository.saveAndFlush(entity));
@@ -52,7 +65,8 @@ public class PaymentTransactionAdapter implements PaymentTransactionRepositoryPo
             entity.getAmount(),
             entity.getStatus(),
             entity.getGatewayResponse(),
-            entity.getCreatedAt()
+            entity.getCreatedAt(),
+            entity.getIdempotencyKey()
         );
     }
 }

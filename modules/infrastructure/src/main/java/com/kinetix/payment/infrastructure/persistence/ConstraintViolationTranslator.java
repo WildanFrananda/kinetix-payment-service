@@ -10,6 +10,7 @@ public final class ConstraintViolationTranslator {
     private static final String IDEMPOTENCY_KEY = "uq_escrow_idempotency_operation_key";
     private static final String ESCROW_ORDER_NUMBER = "UC_ESCROW_HOLDSORDER_NUMBER_COL";
     private static final String TRANSACTION_REFERENCE = "UC_PAYMENT_TRANSACTIONSREFERENCE_NUMBER_COL";
+    private static final String TOP_UP_IDEMPOTENCY_KEY = "uq_payment_transactions_principal_idempotency";
 
     private ConstraintViolationTranslator() {}
 
@@ -21,6 +22,11 @@ public final class ConstraintViolationTranslator {
         if (constraint.equalsIgnoreCase(IDEMPOTENCY_KEY)) {
             return new DuplicateIdempotencyKeyException(
                 "this idempotency key has already been recorded for this operation"
+            );
+        }
+        if (constraint.equalsIgnoreCase(TOP_UP_IDEMPOTENCY_KEY)) {
+            return new DuplicateIdempotencyKeyException(
+                "this idempotency key has already been used by this customer for a top-up"
             );
         }
         if (constraint.equalsIgnoreCase(ESCROW_ORDER_NUMBER)) {

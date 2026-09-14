@@ -413,7 +413,8 @@ public class EscrowService {
             amount,
             PaymentTransaction.TransactionStatus.SUCCESS,
             null,
-            Instant.now()
+            Instant.now(),
+            null
         ));
     }
 

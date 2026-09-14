@@ -1,9 +1,17 @@
 package com.kinetix.payment.domain.port;
 
-import com.kinetix.payment.domain.entity.PaymentTransaction;
-import java.math.BigDecimal;
+import com.kinetix.payment.domain.gateway.GatewayCharge;
+import com.kinetix.payment.domain.gateway.GatewayChargeRequest;
+import com.kinetix.payment.domain.gateway.GatewayNotification;
+import com.kinetix.payment.domain.gateway.GatewayStatus;
+import com.kinetix.payment.domain.gateway.PaymentInstructions;
 
 public interface PaymentGatewayPort {
-    PaymentTransaction createTopUpTransaction(String customerPrincipalId, BigDecimal amount, PaymentTransaction.PaymentMethod method);
-    PaymentTransaction processCheckoutPayment(String orderNumber, String customerPrincipalId, BigDecimal amount, PaymentTransaction.PaymentMethod method);
+    GatewayCharge charge(GatewayChargeRequest request);
+
+    GatewayStatus statusOf(String referenceNumber);
+
+    PaymentInstructions instructionsFrom(String gatewayResponse);
+
+    boolean isAuthentic(GatewayNotification notification);
 }

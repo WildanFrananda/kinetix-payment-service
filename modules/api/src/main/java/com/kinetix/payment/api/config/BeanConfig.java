@@ -2,7 +2,7 @@ package com.kinetix.payment.api.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kinetix.payment.application.EscrowService;
-import com.kinetix.payment.application.PaymentGatewayService;
+import com.kinetix.payment.application.TopUpService;
 import com.kinetix.payment.application.WalletService;
 import com.kinetix.payment.domain.port.*;
 import org.springframework.context.annotation.Bean;
@@ -56,10 +56,19 @@ public class BeanConfig {
     }
 
     @Bean
-    public PaymentGatewayService paymentGatewayService(
+    public TopUpService topUpService(
+        PaymentTransactionRepositoryPort transactionRepository,
+        CustomerWalletRepositoryPort customerWalletRepository,
         PaymentGatewayPort paymentGatewayPort,
-        PaymentTransactionRepositoryPort transactionRepository
+        TransactionRunnerPort transactionRunner,
+        AdvisoryLockPort advisoryLock
     ) {
-        return new PaymentGatewayService(paymentGatewayPort, transactionRepository);
+        return new TopUpService(
+            transactionRepository,
+            customerWalletRepository,
+            paymentGatewayPort,
+            transactionRunner,
+            advisoryLock
+        );
     }
 }

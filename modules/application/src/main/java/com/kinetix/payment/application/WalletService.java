@@ -8,7 +8,6 @@ import com.kinetix.payment.domain.port.CustomerWalletRepositoryPort;
 import com.kinetix.payment.domain.port.DriverWalletRepositoryPort;
 import com.kinetix.payment.domain.port.MerchantWalletRepositoryPort;
 import com.kinetix.payment.domain.port.TransactionRunnerPort;
-import java.math.BigDecimal;
 
 public class WalletService {
     private final CustomerWalletRepositoryPort customerWalletRepository;
@@ -40,16 +39,6 @@ public class WalletService {
                         CustomerWallet.createInitial(customerPrincipalId)
                     ));
             }));
-    }
-
-    public CustomerWallet topUpCustomerWallet(String customerPrincipalId, BigDecimal amount) {
-        return transactionRunner.inNewTransaction(() -> {
-            advisoryLock.lockWalletOwner(customerPrincipalId);
-            CustomerWallet wallet = customerWalletRepository
-                .findByCustomerPrincipalIdForUpdate(customerPrincipalId)
-                .orElseGet(() -> CustomerWallet.createInitial(customerPrincipalId));
-            return customerWalletRepository.save(wallet.topUp(amount));
-        });
     }
 
     public MerchantWallet getMerchantWallet(String merchantPrincipalId) {

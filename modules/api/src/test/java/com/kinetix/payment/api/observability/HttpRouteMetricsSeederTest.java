@@ -79,7 +79,7 @@ class HttpRouteMetricsSeederTest {
             "kinetix_http_requests_total{method=\"POST\","
                 + "route=\"/api/v1/payment/checkout/pay\",status=\"201\"} 0.0",
             "kinetix_http_requests_total{method=\"POST\","
-                + "route=\"/api/v1/payment/wallet/customer/topup\",status=\"201\"} 0.0"
+                + "route=\"/api/v1/payment/wallet/customer/topup\",status=\"202\"} 0.0"
         }) {
             assertTrue(exposition.contains(created),
                 "missing: " + created + "\n" + exposition
@@ -88,7 +88,8 @@ class HttpRouteMetricsSeederTest {
 
         for (String invented : new String[] {
             "route=\"/api/v1/payment/checkout/pay\",status=\"200\"",
-            "route=\"/api/v1/payment/wallet/customer/topup\",status=\"200\""
+            "route=\"/api/v1/payment/wallet/customer/topup\",status=\"200\"",
+            "route=\"/api/v1/payment/wallet/customer/topup\",status=\"201\""
         }) {
             assertFalse(exposition.contains(invented),
                 "payment's two most important success series can never move:\n" + exposition

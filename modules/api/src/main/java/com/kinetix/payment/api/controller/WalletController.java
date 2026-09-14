@@ -1,9 +1,12 @@
 package com.kinetix.payment.api.controller;
 
 import com.kinetix.payment.api.dto.TopUpRequest;
+import com.kinetix.payment.api.dto.TopUpResponse;
 import com.kinetix.payment.api.dto.WalletResponse;
 import com.kinetix.payment.api.security.AccessClaims;
 import com.kinetix.payment.api.security.ForbiddenException;
+import com.kinetix.payment.application.TopUpCommand;
+import com.kinetix.payment.application.TopUpService;
 import com.kinetix.payment.application.WalletService;
 import com.kinetix.payment.domain.entity.CustomerWallet;
 import com.kinetix.payment.domain.entity.DriverWallet;
@@ -19,9 +22,11 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/payment/wallet")
 public class WalletController {
     private final WalletService walletService;
+    private final TopUpService topUpService;
 
-    public WalletController(WalletService walletService) {
+    public WalletController(WalletService walletService, TopUpService topUpService) {
         this.walletService = walletService;
+        this.topUpService = topUpService;
     }
 
     @GetMapping("/customer/balance")
@@ -32,14 +37,25 @@ public class WalletController {
     }
 
     @PostMapping("/customer/topup")
-    @ResponseStatus(HttpStatus.CREATED)
-    public WalletResponse topUpCustomer(
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public TopUpResponse topUpCustomer(
         @AuthenticationPrincipal Jwt jwt,
+        @RequestHeader("Idempotency-Key") String idempotencyKey,
         @Valid @RequestBody TopUpRequest request
     ) {
         AccessClaims caller = require(jwt, AccessClaims.CUSTOMER);
-        CustomerWallet wallet = walletService.topUpCustomerWallet(caller.principalId(), request.amount());
-        return WalletResponse.fromCustomer(wallet);
+        return TopUpResponse.from(topUpService.requestTopUp(new TopUpCommand(
+            caller.principalId(), idempotencyKey, request.amount(), request.paymentMethod(), request.bank()
+        )));
+    }
+
+    @GetMapping("/customer/topup/{referenceNumber}")
+    public TopUpResponse getCustomerTopUp(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable String referenceNumber
+    ) {
+        AccessClaims caller = require(jwt, AccessClaims.CUSTOMER);
+        return TopUpResponse.from(topUpService.findTopUp(caller.principalId(), referenceNumber));
     }
 
     @GetMapping("/merchant/balance")

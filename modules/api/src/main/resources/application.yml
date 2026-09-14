@@ -39,6 +39,10 @@ midtrans:
   # flag means the production path is a code path that never runs until it matters.
   server-key: ${MIDTRANS_SERVER_KEY}
   base-url: ${MIDTRANS_BASE_URL}
+  # Both sides bounded. The adapter used to set a connect timeout and nothing else, so a gateway that
+  # accepted the connection and never answered held a request thread for as long as it liked.
+  connect-timeout-ms: ${MIDTRANS_CONNECT_TIMEOUT_MS:5000}
+  request-timeout-ms: ${MIDTRANS_REQUEST_TIMEOUT_MS:15000}
 
 # The identity service is the only thing on this platform that may sign a token. Every value
 # here is required with no default: a fallback issuer or audience would mean a misconfigured

@@ -6,7 +6,13 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
-@Table(name = "payment_transactions")
+@Table(
+    name = "payment_transactions",
+    uniqueConstraints = @UniqueConstraint(
+        name = "uq_payment_transactions_principal_idempotency",
+        columnNames = {"principal_id", "idempotency_key"}
+    )
+)
 public class PaymentTransactionJpaEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -42,9 +48,12 @@ public class PaymentTransactionJpaEntity {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(name = "idempotency_key", length = 128)
+    private String idempotencyKey;
+
     public PaymentTransactionJpaEntity() {}
 
-    public PaymentTransactionJpaEntity(Long id, String referenceNumber, String externalTransactionId, String principalId, PaymentTransaction.TransactionType type, PaymentTransaction.PaymentMethod method, BigDecimal amount, PaymentTransaction.TransactionStatus status, String gatewayResponse, Instant createdAt) {
+    public PaymentTransactionJpaEntity(Long id, String referenceNumber, String externalTransactionId, String principalId, PaymentTransaction.TransactionType type, PaymentTransaction.PaymentMethod method, BigDecimal amount, PaymentTransaction.TransactionStatus status, String gatewayResponse, Instant createdAt, String idempotencyKey) {
         this.id = id;
         this.referenceNumber = referenceNumber;
         this.externalTransactionId = externalTransactionId;
@@ -55,6 +64,7 @@ public class PaymentTransactionJpaEntity {
         this.status = status;
         this.gatewayResponse = gatewayResponse;
         this.createdAt = createdAt;
+        this.idempotencyKey = idempotencyKey;
     }
 
     public Long getId() { return id; }
@@ -67,4 +77,5 @@ public class PaymentTransactionJpaEntity {
     public PaymentTransaction.TransactionStatus getStatus() { return status; }
     public String getGatewayResponse() { return gatewayResponse; }
     public Instant getCreatedAt() { return createdAt; }
+    public String getIdempotencyKey() { return idempotencyKey; }
 }

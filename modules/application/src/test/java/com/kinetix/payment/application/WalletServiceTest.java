@@ -10,15 +10,12 @@ import com.kinetix.payment.domain.port.MerchantWalletRepositoryPort;
 import com.kinetix.payment.domain.port.TransactionRunnerPort;
 import java.math.BigDecimal;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -35,7 +32,6 @@ class WalletServiceTest {
     private DriverWalletRepositoryPort driverWalletRepository;
     private AdvisoryLockPort advisoryLock;
     private CountingTransactionRunner transactionRunner;
-    private AtomicBoolean lockedInsideATransaction;
     private WalletService walletService;
 
     @BeforeEach
@@ -45,12 +41,6 @@ class WalletServiceTest {
         driverWalletRepository = mock(DriverWalletRepositoryPort.class);
         advisoryLock = mock(AdvisoryLockPort.class);
         transactionRunner = new CountingTransactionRunner();
-
-        lockedInsideATransaction = new AtomicBoolean(false);
-        doAnswer(call -> {
-            lockedInsideATransaction.set(transactionRunner.insideTransaction());
-            return null;
-        }).when(advisoryLock).lockWalletOwner(any());
 
         when(customerWalletRepository.save(any())).thenAnswer(call -> call.getArgument(0));
         when(merchantWalletRepository.save(any())).thenAnswer(call -> call.getArgument(0));
@@ -63,46 +53,6 @@ class WalletServiceTest {
             transactionRunner,
             advisoryLock
         );
-    }
-
-    @Test
-    void topUpCustomerWallet_readsTheBalanceThroughTheSameLockTheEscrowDebitTakes() {
-        when(customerWalletRepository.findByCustomerPrincipalIdForUpdate(CUSTOMER))
-            .thenReturn(Optional.of(CustomerWallet.createInitial(CUSTOMER).topUp(new BigDecimal("200000.00")))
-        );
-
-        CustomerWallet toppedUp = walletService.topUpCustomerWallet(CUSTOMER, new BigDecimal("50000.00"));
-
-        assertEquals(0, new BigDecimal("250000.00").compareTo(toppedUp.balance()));
-        verify(customerWalletRepository).findByCustomerPrincipalIdForUpdate(CUSTOMER);
-        verify(customerWalletRepository, never()).findByCustomerPrincipalId(any());
-    }
-
-    @Test
-    void topUpCustomerWallet_locksAndWritesInsideOneTransaction() {
-        when(customerWalletRepository.findByCustomerPrincipalIdForUpdate(CUSTOMER))
-            .thenReturn(Optional.of(CustomerWallet.createInitial(CUSTOMER)));
-
-        walletService.topUpCustomerWallet(CUSTOMER, new BigDecimal("50000.00"));
-
-        assertEquals(1, transactionRunner.transactions());
-        assertTrue(lockedInsideATransaction.get());
-        InOrder order = inOrder(advisoryLock, customerWalletRepository);
-        order.verify(advisoryLock).lockWalletOwner(CUSTOMER);
-        order.verify(customerWalletRepository).findByCustomerPrincipalIdForUpdate(CUSTOMER);
-        order.verify(customerWalletRepository).save(any());
-    }
-
-    @Test
-    void topUpCustomerWallet_createsTheFirstWalletUnderTheOwnerLock() {
-        when(customerWalletRepository.findByCustomerPrincipalIdForUpdate(CUSTOMER))
-            .thenReturn(Optional.empty()
-        );
-
-        CustomerWallet created = walletService.topUpCustomerWallet(CUSTOMER, new BigDecimal("50000.00"));
-
-        assertEquals(0, new BigDecimal("50000.00").compareTo(created.balance()));
-        verify(advisoryLock).lockWalletOwner(CUSTOMER);
     }
 
     @Test
