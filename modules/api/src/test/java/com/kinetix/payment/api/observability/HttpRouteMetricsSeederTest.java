@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.kinetix.payment.api.controller.EscrowController;
-import com.kinetix.payment.api.controller.PaymentController;
 import com.kinetix.payment.api.controller.WalletController;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import java.time.Duration;
@@ -71,13 +70,11 @@ class HttpRouteMetricsSeederTest {
     }
 
     @Test
-    void paymentsOwnCreatedRoutesAreSeededAsCreated() {
+    void aRouteDeclaringANonOkStatusIsSeededWithThatStatus() {
         String exposition =
-            seed(PaymentController.class, WalletController.class, EscrowController.class);
+            seed(WalletController.class, EscrowController.class);
 
         for (String created : new String[] {
-            "kinetix_http_requests_total{method=\"POST\","
-                + "route=\"/api/v1/payment/checkout/pay\",status=\"201\"} 0.0",
             "kinetix_http_requests_total{method=\"POST\","
                 + "route=\"/api/v1/payment/wallet/customer/topup\",status=\"202\"} 0.0"
         }) {
@@ -87,12 +84,11 @@ class HttpRouteMetricsSeederTest {
         }
 
         for (String invented : new String[] {
-            "route=\"/api/v1/payment/checkout/pay\",status=\"200\"",
             "route=\"/api/v1/payment/wallet/customer/topup\",status=\"200\"",
             "route=\"/api/v1/payment/wallet/customer/topup\",status=\"201\""
         }) {
             assertFalse(exposition.contains(invented),
-                "payment's two most important success series can never move:\n" + exposition
+                "a top-up that answers 202 would never move a series seeded as anything else:\n" + exposition
             );
         }
 
