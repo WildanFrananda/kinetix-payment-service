@@ -27,6 +27,13 @@ RUN gradle --no-daemon :modules:api:bootJar -x test \
 
 FROM eclipse-temurin:21-jre@sha256:7a65df4b22d2de92d4e04056e884f3b9122d70b21e2847fd66084278bd0ce037 AS final
 
+# The base is pinned by digest, which also means it stops receiving Ubuntu's security updates. CI's image
+# scan fails the build on a CRITICAL that has a fix available — eight of them on the first run — so the
+# patches are applied here. The digest still decides which JRE ships.
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system --gid 10001 payment \
     && useradd --system --uid 10001 --gid 10001 --no-create-home payment
 

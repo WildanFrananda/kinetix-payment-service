@@ -58,6 +58,13 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # The .proto files are not in this repository; scripts/sync-contracts fetches them at a pinned commit
+      # into .contracts/, which modules/infrastructure/build.gradle reads as a proto source directory. The
+      # Dockerfile does this before building, and CI has to as well — without it the gRPC stubs are missing
+      # and the build dies on 39 unresolved symbols, which is how this job failed on its first run.
+      - name: Fetch the contracts
+        run: sh scripts/sync-contracts
+
       - name: Build the jar
         run: ./gradlew --no-daemon :modules:api:bootJar
 
