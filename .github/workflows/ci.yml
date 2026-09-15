@@ -79,6 +79,17 @@ jobs:
       - name: Tests
         run: ./gradlew --no-daemon test
 
+      # The probes here print what they saw and put the detail in the assertion message. Gradle's default
+      # console logging shows neither, so the first red run said only "AssertionFailedError at
+      # ReviewProbeIntegrationTest.java:416" — a concurrency failure with the evidence thrown away, and it
+      # does not reproduce on demand. The XML carries the message and the standard output.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: modules/*/build/test-results/test/*.xml
+          retention-days: 7
+
       # A green suite that ran no integration test is a false pass: they are annotated
       # @EnabledIfEnvironmentVariable, so a missing variable skips them without a word.
       - name: The integration tests must have actually run

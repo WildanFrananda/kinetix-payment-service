@@ -24,6 +24,7 @@ import com.kinetix.payment.domain.port.PaymentTransactionRepositoryPort;
 import com.kinetix.payment.domain.port.TransactionRunnerPort;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -188,6 +189,10 @@ public class EscrowService {
             command.shippingFeeAmount()
         ));
 
+        lockWalletOwners(command.customerPrincipalId(), command.merchantPrincipalId(),
+            command.driverPrincipalId()
+        );
+
         CustomerWallet customerWallet = customerWalletRepository
             .findByCustomerPrincipalIdForUpdate(command.customerPrincipalId())
             .orElseGet(() -> CustomerWallet.createInitial(command.customerPrincipalId()));
@@ -291,6 +296,8 @@ public class EscrowService {
         }
         requireStillHeld(hold, "released");
 
+        lockWalletOwners(hold.merchantPrincipalId(), hold.driverPrincipalId());
+
         MerchantWallet merchantWallet = merchantWalletRepository
             .findByMerchantPrincipalIdForUpdate(hold.merchantPrincipalId())
             .orElseGet(() -> MerchantWallet.createInitial(hold.merchantPrincipalId()));
@@ -351,6 +358,10 @@ public class EscrowService {
             );
         }
         requireStillHeld(hold, "refunded");
+
+        lockWalletOwners(hold.customerPrincipalId(), hold.merchantPrincipalId(),
+            hold.driverPrincipalId()
+        );
 
         CustomerWallet customerWallet = customerWalletRepository
             .findByCustomerPrincipalIdForUpdate(hold.customerPrincipalId())
@@ -456,6 +467,28 @@ public class EscrowService {
 
     private static boolean hasDriver(String driverPrincipalId) {
         return driverPrincipalId != null && !driverPrincipalId.isBlank();
+    }
+
+    /**
+     * Takes the wallet-owner lock for every principal this operation is about to touch.
+     *
+     * <p>Every wallet here is read with {@code findBy…ForUpdate(…).orElseGet(createInitial)}, and
+     * {@code SELECT … FOR UPDATE} locks rows that exist. A wallet nobody has created yet has no row to
+     * lock, so two transactions reaching a first-ever merchant at the same moment both see it absent and
+     * both insert; the unique constraint on the owner then fails one of them, and a checkout dies on a
+     * duplicate key. {@code WalletService} already takes this lock before creating a wallet for exactly
+     * this reason — a balance read and a checkout landing together were racing each other, because only
+     * one side was holding the lock.
+     *
+     * <p>Owners are locked in a fixed order, so two operations that share principals queue behind each
+     * other rather than deadlocking. Blank ids are skipped: an order with no driver has no driver wallet.
+     */
+    private void lockWalletOwners(String... principalIds) {
+        Arrays.stream(principalIds)
+            .filter(id -> id != null && !id.isBlank())
+            .distinct()
+            .sorted()
+            .forEach(advisoryLock::lockWalletOwner);
     }
 
     private static String resolveKey(String supplied, String orderNumber) {

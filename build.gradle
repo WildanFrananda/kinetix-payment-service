@@ -1,6 +1,9 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.4.3' apply false
+    // 3.4.13, not 3.4.3: the image scan failed on eight CRITICALs, all of them versions Boot manages —
+    // six in tomcat-embed-core 10.1.36 and two in spring-security 6.4.3. Staying on the 3.4 line keeps this
+    // a patch bump rather than a framework upgrade.
+    id 'org.springframework.boot' version '3.4.13' apply false
     id 'io.spring.dependency-management' version '1.1.7' apply false
 }
 
@@ -28,5 +31,18 @@ subprojects {
 
     tasks.withType(Test) {
         useJUnitPlatform()
+
+        // Failures carry their evidence in the assertion message and, for the concurrency probes, in what
+        // the test printed as it ran. Gradle's default reports neither, so a red CI run showed a bare
+        // "AssertionFailedError at ReviewProbeIntegrationTest.java:416" for a race that does not
+        // reproduce on demand. Only failures are verbose; a green run stays quiet.
+        testLogging {
+            events 'failed'
+            exceptionFormat 'full'
+            showStandardStreams false
+            showExceptions true
+            showCauses true
+            showStackTraces true
+        }
     }
 }
