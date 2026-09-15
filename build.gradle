@@ -1,9 +1,6 @@
 plugins {
     id 'java'
-    // 3.4.13, not 3.4.3: the image scan failed on eight CRITICALs, all of them versions Boot manages —
-    // six in tomcat-embed-core 10.1.36 and two in spring-security 6.4.3. Staying on the 3.4 line keeps this
-    // a patch bump rather than a framework upgrade.
-    id 'org.springframework.boot' version '3.4.13' apply false
+    id 'org.springframework.boot' version '3.5.16' apply false
     id 'io.spring.dependency-management' version '1.1.7' apply false
 }
 

@@ -5,6 +5,8 @@ plugins {
     id 'org.liquibase.gradle' version '2.2.2'
 }
 
+ext['tomcat.version'] = '10.1.59'
+
 dependencies {
     implementation project(':modules:domain')
     implementation project(':modules:application')
