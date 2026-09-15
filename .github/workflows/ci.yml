@@ -1,0 +1,83 @@
+name: CI
+
+# payment had no CI at all until now. (kinetix-infrastructure/docs/STAGING-DEPLOYMENT-PLAN.md §5, item 6)
+#
+# The integration tests are gated on PAYMENT_TEST_DB_URL and run with `spring.liquibase.enabled=false`
+# and `ddl-auto=validate`: they expect a schema that already exists and refuse to create one. So the
+# job applies the changelog exactly the way production does — the application's own `migrate` profile,
+# the same code path the migrator container runs — and only then runs the suite. Without that step the
+# integration tests would quietly skip themselves and the job would still be green, which is the one
+# outcome worth preventing.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-ephemeral-not-a-deployed-credential
+          POSTGRES_DB: kinetix_payment_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U ci"
+          --health-interval=10s --health-timeout=5s --health-retries=5
+
+    env:
+      # Values a throwaway container owns, and nothing else.
+      DB_URL: jdbc:postgresql://localhost:5432/kinetix_payment_test
+      DB_USERNAME: ci
+      DB_PASSWORD: ci-ephemeral-not-a-deployed-credential
+      PAYMENT_TEST_DB_URL: jdbc:postgresql://localhost:5432/kinetix_payment_test
+      PAYMENT_TEST_DB_USERNAME: ci
+      PAYMENT_TEST_DB_PASSWORD: ci-ephemeral-not-a-deployed-credential
+      # Required by application.yml with no default. The gateway is never called in these tests; the
+      # URL points at a port nothing listens on, so a test that tried would fail loudly rather than
+      # reach the real sandbox.
+      MIDTRANS_SERVER_KEY: ci-not-a-real-key
+      MIDTRANS_BASE_URL: http://127.0.0.1:1
+      IDENTITY_JWKS_URL: http://127.0.0.1:1/.well-known/jwks.json
+      JWT_ISSUER: https://identity.ci.invalid
+      JWT_AUDIENCE: kinetix
+      GRPC_ALLOWED_CALLERS: order
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build the jar
+        run: ./gradlew --no-daemon :modules:api:bootJar
+
+      # The migrate profile turns the gRPC server off with a negative port, so the process exits once
+      # Liquibase finishes — the same contract the migrator container has in compose.
+      - name: Apply the changelog with the application's own migrate profile
+        env:
+          SPRING_PROFILES_ACTIVE: migrate
+          GRPC_PORT: "-1"
+        run: java -jar modules/api/build/libs/*.jar
+
+      - name: Tests
+        run: ./gradlew --no-daemon test
+
+      # A green suite that ran no integration test is a false pass: they are annotated
+      # @EnabledIfEnvironmentVariable, so a missing variable skips them without a word.
+      - name: The integration tests must have actually run
+        run: |
+          if ! grep -rqs 'ReviewProbeIntegrationTest' modules/*/build/test-results/test/*.xml; then
+            echo "no integration test results found — the suite skipped them"
+            exit 1
+          fi
+          echo "integration tests ran"
