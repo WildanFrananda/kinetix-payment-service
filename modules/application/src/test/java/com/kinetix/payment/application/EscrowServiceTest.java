@@ -26,6 +26,7 @@ import org.mockito.InOrder;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -418,6 +419,55 @@ class EscrowServiceTest {
             7L, EscrowOperation.CREATE_HOLD, "order:" + ORDER, IdempotencyKeySource.DERIVED,
             ORDER, fingerprint, 42L, null, Instant.now()
         );
+    }
+
+    @Test
+    void theAutoReleaseSweepReleasesEveryHoldThatIsDue() {
+        String other = "ORD-2";
+        when(escrowRepository.findPendingAutoReleaseHolds())
+            .thenReturn(List.of(dueHold(ORDER), dueHold(other)));
+        givenReleasableHold(ORDER);
+        givenReleasableHold(other);
+
+        assertEquals(2, escrowService.processAutoReleaseJob());
+
+        verify(merchantWalletRepository, times(2)).save(any());
+    }
+
+    @Test
+    void oneHoldThatCannotBeReleasedDoesNotStopThePayoutsBehindIt() {
+        String broken = "ORD-BROKEN";
+        when(escrowRepository.findPendingAutoReleaseHolds())
+            .thenReturn(List.of(dueHold(broken), dueHold(ORDER)));
+        when(escrowRepository.findByOrderNumberForUpdate(broken)).thenReturn(Optional.empty());
+        when(escrowRepository.findByOrderNumber(broken)).thenReturn(Optional.empty());
+        givenReleasableHold(ORDER);
+
+        assertEquals(1, escrowService.processAutoReleaseJob());
+
+        verify(merchantWalletRepository, times(1)).save(any());
+    }
+
+    @Test
+    void aSweepWithNothingDueTouchesNoWallet() {
+        when(escrowRepository.findPendingAutoReleaseHolds()).thenReturn(List.of());
+
+        assertEquals(0, escrowService.processAutoReleaseJob());
+
+        verifyNoInteractions(merchantWalletRepository, driverWalletRepository, advisoryLock);
+    }
+
+    private EscrowHold dueHold(String orderNumber) {
+        return new EscrowHold(
+            42L, orderNumber, CUSTOMER, MERCHANT, DRIVER, TOTAL, MERCHANT_AMOUNT, SHIPPING,
+            EscrowHold.EscrowStatus.HELD, Instant.now().minusSeconds(60), Instant.now(), null
+        );
+    }
+
+    private void givenReleasableHold(String orderNumber) {
+        EscrowHold hold = dueHold(orderNumber);
+        when(escrowRepository.findByOrderNumberForUpdate(orderNumber)).thenReturn(Optional.of(hold));
+        when(escrowRepository.findByOrderNumber(orderNumber)).thenReturn(Optional.of(hold));
     }
 
     private static EscrowHold withId(EscrowHold hold, Long id) {

@@ -23,7 +23,9 @@ import com.kinetix.payment.domain.port.CustomerWalletRepositoryPort;
 import com.kinetix.payment.domain.port.PaymentGatewayPort;
 import com.kinetix.payment.domain.port.PaymentTransactionRepositoryPort;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,11 +38,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -348,6 +352,111 @@ class TopUpServiceTest {
         assertThrows(TopUpNotFoundException.class, () -> service.settle("escrow:hold:ORD-1"));
 
         verifyNoInteractions(gateway, customerWallets);
+    }
+
+    @Test
+    void theSweepAsksTheGatewayAboutEachStaleTopUpAndCreditsTheOnesThatWerePaid() {
+        stale(pendingTopUp("TOPUP-a"), pendingTopUp("TOPUP-b"));
+        when(gateway.statusOf("TOPUP-a")).thenReturn(gatewaySays(GatewaySettlement.SETTLED, "50000.00"));
+        when(gateway.statusOf("TOPUP-b")).thenReturn(gatewaySays(GatewaySettlement.SETTLED, "50000.00"));
+        when(customerWallets.findByCustomerPrincipalIdForUpdate(CUSTOMER))
+            .thenReturn(Optional.of(CustomerWallet.createInitial(CUSTOMER)));
+
+        assertEquals(2, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100));
+
+        verify(transactions, times(2)).save(argThat((PaymentTransaction t) ->
+            t.status() == TransactionStatus.SUCCESS
+        ));
+    }
+
+    @Test
+    void aTopUpTheGatewayCannotBeAskedAboutDoesNotStopTheRestOfTheSweep() {
+        stale(pendingTopUp("TOPUP-unreachable"), pendingTopUp("TOPUP-paid"));
+        when(gateway.statusOf("TOPUP-unreachable")).thenReturn(gatewaySays(GatewaySettlement.UNKNOWN, null));
+        when(gateway.statusOf("TOPUP-paid")).thenReturn(gatewaySays(GatewaySettlement.SETTLED, "50000.00"));
+        when(customerWallets.findByCustomerPrincipalIdForUpdate(CUSTOMER))
+            .thenReturn(Optional.of(CustomerWallet.createInitial(CUSTOMER)));
+
+        assertEquals(1, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100));
+
+        verify(transactions, never()).save(argThat((PaymentTransaction t) ->
+            "TOPUP-unreachable".equals(t.referenceNumber()) && t.status() != TransactionStatus.PENDING
+        ));
+        verify(gateway).statusOf("TOPUP-paid");
+    }
+
+    @Test
+    void aTopUpTheGatewayDisagreesAboutDoesNotStopTheRestOfTheSweep() {
+        stale(pendingTopUp("TOPUP-mismatch"), pendingTopUp("TOPUP-paid"));
+        when(gateway.statusOf("TOPUP-mismatch")).thenReturn(gatewaySays(GatewaySettlement.SETTLED, "1.00"));
+        when(gateway.statusOf("TOPUP-paid")).thenReturn(gatewaySays(GatewaySettlement.SETTLED, "50000.00"));
+        when(customerWallets.findByCustomerPrincipalIdForUpdate(CUSTOMER))
+            .thenReturn(Optional.of(CustomerWallet.createInitial(CUSTOMER)));
+
+        assertEquals(1, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100));
+
+        verify(gateway).statusOf("TOPUP-paid");
+        verify(customerWallets, times(1)).save(any());
+    }
+
+    @Test
+    void aTopUpTheGatewayStillCallsPendingIsLeftPendingAndNotCounted() {
+        stale(pendingTopUp("TOPUP-a"));
+        when(gateway.statusOf("TOPUP-a")).thenReturn(gatewaySays(GatewaySettlement.PENDING, null));
+
+        assertEquals(0, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100));
+
+        verifyNoInteractions(customerWallets);
+    }
+
+    @Test
+    void anExpiredTopUpIsConcludedWithoutCreditingAnything() {
+        stale(pendingTopUp("TOPUP-a"));
+        when(gateway.statusOf("TOPUP-a")).thenReturn(gatewaySays(GatewaySettlement.EXPIRED, null));
+
+        assertEquals(1, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100));
+
+        verify(transactions).save(argThat((PaymentTransaction t) -> t.status() == TransactionStatus.EXPIRED));
+        verify(customerWallets, never()).save(any());
+    }
+
+    @Test
+    void theSweepAsksForTopUpsOlderThanTheCutoffAndNoMoreThanTheBatchSize() {
+        when(transactions.findPendingTopUpsOlderThan(any(), anyInt())).thenReturn(List.of());
+
+        Instant before = Instant.now();
+        service.reconcilePendingTopUps(Duration.ofMinutes(10), 25);
+        Instant after = Instant.now();
+
+        ArgumentCaptor<Instant> cutoff = ArgumentCaptor.forClass(Instant.class);
+        ArgumentCaptor<Integer> batch = ArgumentCaptor.forClass(Integer.class);
+        verify(transactions).findPendingTopUpsOlderThan(cutoff.capture(), batch.capture());
+        assertEquals(25, batch.getValue());
+        assertFalse(cutoff.getValue().isBefore(before.minus(Duration.ofMinutes(10))));
+        assertFalse(cutoff.getValue().isAfter(after.minus(Duration.ofMinutes(10))));
+    }
+
+    @Test
+    void aSweepWithNothingStaleTouchesNothing() {
+        when(transactions.findPendingTopUpsOlderThan(any(), anyInt())).thenReturn(List.of());
+
+        assertEquals(0, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100));
+
+        verifyNoInteractions(gateway, customerWallets, advisoryLock);
+    }
+
+    private void stale(PaymentTransaction... pending) {
+        when(transactions.findPendingTopUpsOlderThan(any(), anyInt())).thenReturn(List.of(pending));
+        for (PaymentTransaction transaction : pending) {
+            when(transactions.findByReferenceNumber(transaction.referenceNumber()))
+                .thenReturn(Optional.of(transaction));
+            when(transactions.findByReferenceNumberForUpdate(transaction.referenceNumber()))
+                .thenReturn(Optional.of(transaction));
+        }
+    }
+
+    private static PaymentTransaction pendingTopUp(String reference) {
+        return charged(reference, AMOUNT);
     }
 
     private static TopUpCommand vaTopUp() {

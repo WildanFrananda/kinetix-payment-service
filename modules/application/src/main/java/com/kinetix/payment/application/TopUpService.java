@@ -22,6 +22,9 @@ import com.kinetix.payment.domain.port.PaymentGatewayPort;
 import com.kinetix.payment.domain.port.PaymentTransactionRepositoryPort;
 import com.kinetix.payment.domain.port.TransactionRunnerPort;
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -95,6 +98,37 @@ public class TopUpService {
                 "no top-up " + referenceNumber + " belongs to this account"
             ));
         return new TopUpOutcome(found, instructionsFor(found), true);
+    }
+
+    public int reconcilePendingTopUps(Duration olderThan, int batchSize) {
+        List<PaymentTransaction> stale = transactions.findPendingTopUpsOlderThan(
+            Instant.now().minus(olderThan), batchSize
+        );
+        if (stale.isEmpty()) {
+            return 0;
+        }
+        LOG.info("reconciling {} top-up(s) that have been pending longer than {}", stale.size(), olderThan);
+
+        int concluded = 0;
+        for (PaymentTransaction pending : stale) {
+            String reference = pending.referenceNumber();
+            try {
+                SettlementOutcome outcome = settle(reference);
+                if (outcome.transaction().status() != TransactionStatus.PENDING) {
+                    concluded++;
+                    LOG.info("reconciled {}: {}", reference, outcome.transaction().status());
+                }
+            } catch (GatewayUnavailableException unavailable) {
+                LOG.warn("reconciliation could not reach the gateway for {}; it stays pending and will "
+                    + "be asked about again", reference
+                );
+            } catch (RuntimeException failure) {
+                LOG.error("reconciliation of {} failed and needs a person to look: {}",
+                    reference, failure.getMessage()
+                );
+            }
+        }
+        return concluded;
     }
 
     public SettlementOutcome settle(String referenceNumber) {

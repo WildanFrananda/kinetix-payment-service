@@ -3,7 +3,10 @@ package com.kinetix.payment.infrastructure.persistence;
 import com.kinetix.payment.domain.entity.PaymentTransaction;
 import com.kinetix.payment.domain.port.PaymentTransactionRepositoryPort;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Component;
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 @Component
@@ -30,6 +33,13 @@ public class PaymentTransactionAdapter implements PaymentTransactionRepositoryPo
     public Optional<PaymentTransaction> findByPrincipalIdAndIdempotencyKey(String principalId, String idempotencyKey) {
         return jpaRepository.findByPrincipalIdAndIdempotencyKey(principalId, idempotencyKey)
             .map(this::toDomain);
+    }
+
+    @Override
+    public List<PaymentTransaction> findPendingTopUpsOlderThan(Instant olderThan, int limit) {
+        return jpaRepository.findPendingTopUpsOlderThan(olderThan, Limit.of(limit)).stream()
+            .map(this::toDomain)
+            .toList();
     }
 
     @Override
