@@ -8,6 +8,7 @@ import com.kinetix.payment.domain.entity.EscrowOperation;
 import com.kinetix.payment.domain.entity.IdempotencyKeySource;
 import com.kinetix.payment.domain.entity.MerchantWallet;
 import com.kinetix.payment.domain.entity.PaymentTransaction;
+import com.kinetix.payment.domain.entity.SuspenseWallet;
 import com.kinetix.payment.domain.exception.DomainException;
 import com.kinetix.payment.domain.exception.DuplicateIdempotencyKeyException;
 import com.kinetix.payment.domain.exception.DuplicateOrderNumberException;
@@ -21,6 +22,7 @@ import com.kinetix.payment.domain.port.EscrowIdempotencyRepositoryPort;
 import com.kinetix.payment.domain.port.EscrowRepositoryPort;
 import com.kinetix.payment.domain.port.MerchantWalletRepositoryPort;
 import com.kinetix.payment.domain.port.PaymentTransactionRepositoryPort;
+import com.kinetix.payment.domain.port.SuspenseWalletRepositoryPort;
 import com.kinetix.payment.domain.port.TransactionRunnerPort;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -42,6 +44,7 @@ public class EscrowService {
     private final CustomerWalletRepositoryPort customerWalletRepository;
     private final MerchantWalletRepositoryPort merchantWalletRepository;
     private final DriverWalletRepositoryPort driverWalletRepository;
+    private final SuspenseWalletRepositoryPort suspenseWalletRepository;
     private final PaymentTransactionRepositoryPort paymentTransactionRepository;
     private final EscrowIdempotencyRepositoryPort idempotencyRepository;
     private final TransactionRunnerPort transactionRunner;
@@ -52,6 +55,7 @@ public class EscrowService {
         CustomerWalletRepositoryPort customerWalletRepository,
         MerchantWalletRepositoryPort merchantWalletRepository,
         DriverWalletRepositoryPort driverWalletRepository,
+        SuspenseWalletRepositoryPort suspenseWalletRepository,
         PaymentTransactionRepositoryPort paymentTransactionRepository,
         EscrowIdempotencyRepositoryPort idempotencyRepository,
         TransactionRunnerPort transactionRunner,
@@ -61,6 +65,7 @@ public class EscrowService {
         this.customerWalletRepository = customerWalletRepository;
         this.merchantWalletRepository = merchantWalletRepository;
         this.driverWalletRepository = driverWalletRepository;
+        this.suspenseWalletRepository = suspenseWalletRepository;
         this.paymentTransactionRepository = paymentTransactionRepository;
         this.idempotencyRepository = idempotencyRepository;
         this.transactionRunner = transactionRunner;
@@ -204,7 +209,7 @@ public class EscrowService {
         ));
 
         lockWalletOwners(command.customerPrincipalId(), command.merchantPrincipalId(),
-            command.driverPrincipalId()
+            shippingFeeHolder(command.driverPrincipalId())
         );
 
         CustomerWallet customerWallet = customerWalletRepository
@@ -222,6 +227,10 @@ public class EscrowService {
                 .findByDriverPrincipalIdForUpdate(command.driverPrincipalId())
                 .orElseGet(() -> DriverWallet.createInitial(command.driverPrincipalId()));
             driverWalletRepository.save(driverWallet.addPendingEscrow(command.shippingFeeAmount()));
+        } else if (isMoney(command.shippingFeeAmount())) {
+            suspenseWalletRepository.save(
+                unassignedDriverFees().addPendingEscrow(command.shippingFeeAmount())
+            );
         }
 
         recordLedgerEntry(PaymentTransaction.TransactionType.CHECKOUT_PAYMENT,
@@ -310,7 +319,7 @@ public class EscrowService {
         }
         requireStillHeld(hold, "released");
 
-        lockWalletOwners(hold.merchantPrincipalId(), hold.driverPrincipalId());
+        lockWalletOwners(hold.merchantPrincipalId(), shippingFeeHolder(hold.driverPrincipalId()));
 
         MerchantWallet merchantWallet = merchantWalletRepository
             .findByMerchantPrincipalIdForUpdate(hold.merchantPrincipalId())
@@ -322,6 +331,13 @@ public class EscrowService {
                 .findByDriverPrincipalIdForUpdate(hold.driverPrincipalId())
                 .orElseGet(() -> DriverWallet.createInitial(hold.driverPrincipalId()));
             driverWalletRepository.save(driverWallet.releaseEscrowToAvailable(hold.shippingFeeAmount()));
+        } else if (isMoney(hold.shippingFeeAmount())) {
+            suspenseWalletRepository.save(
+                unassignedDriverFees().releaseEscrowToAvailable(hold.shippingFeeAmount())
+            );
+            recordLedgerEntry(PaymentTransaction.TransactionType.SHIPPING_FEE,
+                orderNumber, SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE, hold.shippingFeeAmount()
+            );
         }
 
         EscrowHold released = escrowRepository.save(hold.markAsReleased());
@@ -374,7 +390,7 @@ public class EscrowService {
         requireStillHeld(hold, "refunded");
 
         lockWalletOwners(hold.customerPrincipalId(), hold.merchantPrincipalId(),
-            hold.driverPrincipalId()
+            shippingFeeHolder(hold.driverPrincipalId())
         );
 
         CustomerWallet customerWallet = customerWalletRepository
@@ -392,6 +408,10 @@ public class EscrowService {
                 .findByDriverPrincipalIdForUpdate(hold.driverPrincipalId())
                 .orElseGet(() -> DriverWallet.createInitial(hold.driverPrincipalId()));
             driverWalletRepository.save(driverWallet.cancelPendingEscrow(hold.shippingFeeAmount()));
+        } else if (isMoney(hold.shippingFeeAmount())) {
+            suspenseWalletRepository.save(
+                unassignedDriverFees().cancelPendingEscrow(hold.shippingFeeAmount())
+            );
         }
 
         EscrowHold refunded = escrowRepository.save(hold.markAsRefunded());
@@ -450,6 +470,7 @@ public class EscrowService {
             case CHECKOUT_PAYMENT -> "escrow:hold:";
             case ESCROW_RELEASE -> "escrow:release:";
             case REFUND -> "escrow:refund:";
+            case SHIPPING_FEE -> "escrow:shipping:";
             case TOPUP -> throw new IllegalArgumentException("a top-up is not an escrow movement");
         };
         return prefix + orderNumber;
@@ -483,20 +504,24 @@ public class EscrowService {
         return driverPrincipalId != null && !driverPrincipalId.isBlank();
     }
 
-    /**
-     * Takes the wallet-owner lock for every principal this operation is about to touch.
-     *
-     * <p>Every wallet here is read with {@code findBy…ForUpdate(…).orElseGet(createInitial)}, and
-     * {@code SELECT … FOR UPDATE} locks rows that exist. A wallet nobody has created yet has no row to
-     * lock, so two transactions reaching a first-ever merchant at the same moment both see it absent and
-     * both insert; the unique constraint on the owner then fails one of them, and a checkout dies on a
-     * duplicate key. {@code WalletService} already takes this lock before creating a wallet for exactly
-     * this reason — a balance read and a checkout landing together were racing each other, because only
-     * one side was holding the lock.
-     *
-     * <p>Owners are locked in a fixed order, so two operations that share principals queue behind each
-     * other rather than deadlocking. Blank ids are skipped: an order with no driver has no driver wallet.
-     */
+    private static String shippingFeeHolder(String driverPrincipalId) {
+        return hasDriver(driverPrincipalId)
+            ? driverPrincipalId
+            : SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE;
+    }
+
+    private static boolean isMoney(BigDecimal amount) {
+        return amount != null && amount.signum() > 0;
+    }
+
+    private SuspenseWallet unassignedDriverFees() {
+        return suspenseWalletRepository
+            .findByPurposeForUpdate(SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE)
+            .orElseGet(() -> SuspenseWallet.createInitial(
+                SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE
+            ));
+    }
+
     private void lockWalletOwners(String... principalIds) {
         Arrays.stream(principalIds)
             .filter(id -> id != null && !id.isBlank())
