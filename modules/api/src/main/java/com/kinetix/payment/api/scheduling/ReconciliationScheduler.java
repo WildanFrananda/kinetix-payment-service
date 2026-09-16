@@ -7,7 +7,9 @@ import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Profile;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -21,19 +23,33 @@ public class ReconciliationScheduler {
     private final ShutdownState shutdownState;
     private final Duration pendingTopUpAge;
     private final int topUpBatchSize;
+    private final Duration topUpInterval;
+    private final Duration escrowInterval;
 
     public ReconciliationScheduler(
         TopUpService topUps,
         EscrowService escrow,
         ShutdownState shutdownState,
         @Value("${kinetix.reconciliation.pending-top-up-age}") Duration pendingTopUpAge,
-        @Value("${kinetix.reconciliation.top-up-batch-size}") int topUpBatchSize
+        @Value("${kinetix.reconciliation.top-up-batch-size}") int topUpBatchSize,
+        @Value("${kinetix.reconciliation.top-up-interval}") Duration topUpInterval,
+        @Value("${kinetix.reconciliation.escrow-interval}") Duration escrowInterval
     ) {
         this.topUps = topUps;
         this.escrow = escrow;
         this.shutdownState = shutdownState;
         this.pendingTopUpAge = pendingTopUpAge;
         this.topUpBatchSize = topUpBatchSize;
+        this.topUpInterval = topUpInterval;
+        this.escrowInterval = escrowInterval;
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void announce() {
+        LOG.info("reconciliation armed: top-ups older than {} every {} (max {} per sweep), "
+            + "escrow auto-release every {}",
+            pendingTopUpAge, topUpInterval, topUpBatchSize, escrowInterval
+        );
     }
 
     @Scheduled(
