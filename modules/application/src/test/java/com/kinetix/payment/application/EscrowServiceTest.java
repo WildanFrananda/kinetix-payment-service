@@ -7,6 +7,7 @@ import com.kinetix.payment.domain.entity.EscrowOperation;
 import com.kinetix.payment.domain.entity.IdempotencyKeySource;
 import com.kinetix.payment.domain.entity.MerchantWallet;
 import com.kinetix.payment.domain.entity.PaymentTransaction;
+import com.kinetix.payment.domain.entity.SuspenseWallet;
 import com.kinetix.payment.domain.exception.DomainException;
 import com.kinetix.payment.domain.exception.DuplicateIdempotencyKeyException;
 import com.kinetix.payment.domain.exception.DuplicateOrderNumberException;
@@ -20,8 +21,10 @@ import com.kinetix.payment.domain.port.EscrowIdempotencyRepositoryPort;
 import com.kinetix.payment.domain.port.EscrowRepositoryPort;
 import com.kinetix.payment.domain.port.MerchantWalletRepositoryPort;
 import com.kinetix.payment.domain.port.PaymentTransactionRepositoryPort;
+import com.kinetix.payment.domain.port.SuspenseWalletRepositoryPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
 import java.math.BigDecimal;
@@ -48,6 +51,7 @@ class EscrowServiceTest {
     private MerchantWalletRepositoryPort merchantWalletRepository;
     private DriverWalletRepositoryPort driverWalletRepository;
     private PaymentTransactionRepositoryPort paymentTransactionRepository;
+    private SuspenseWalletRepositoryPort suspenseWalletRepository;
     private EscrowIdempotencyRepositoryPort idempotencyRepository;
     private AdvisoryLockPort advisoryLock;
     private EscrowService escrowService;
@@ -59,17 +63,21 @@ class EscrowServiceTest {
         merchantWalletRepository = mock(MerchantWalletRepositoryPort.class);
         driverWalletRepository = mock(DriverWalletRepositoryPort.class);
         paymentTransactionRepository = mock(PaymentTransactionRepositoryPort.class);
+        suspenseWalletRepository = mock(SuspenseWalletRepositoryPort.class);
         idempotencyRepository = mock(EscrowIdempotencyRepositoryPort.class);
         advisoryLock = mock(AdvisoryLockPort.class);
 
         when(escrowRepository.save(any())).thenAnswer(call -> withId(call.getArgument(0), 42L));
         when(idempotencyRepository.save(any())).thenAnswer(call -> call.getArgument(0));
+        when(suspenseWalletRepository.save(any())).thenAnswer(call -> call.getArgument(0));
+        when(suspenseWalletRepository.findByPurposeForUpdate(any())).thenReturn(Optional.empty());
 
         escrowService = new EscrowService(
             escrowRepository,
             customerWalletRepository,
             merchantWalletRepository,
             driverWalletRepository,
+            suspenseWalletRepository,
             paymentTransactionRepository,
             idempotencyRepository,
             new DirectTransactionRunner(),
@@ -373,6 +381,123 @@ class EscrowServiceTest {
         assertNotNull(outcome.hold());
         assertEquals(EscrowHold.EscrowStatus.REFUNDED, outcome.hold().status());
         verify(customerWalletRepository).save(any());
+    }
+
+    @Test
+    void aHoldWithNoDriverHoldsTheShippingFeeInSuspenseRatherThanNowhere() {
+        givenCustomerWallet(new BigDecimal("200000.00"));
+
+        escrowService.createEscrowHold(driverlessCommand());
+
+        ArgumentCaptor<SuspenseWallet> held = ArgumentCaptor.forClass(SuspenseWallet.class);
+        verify(suspenseWalletRepository).save(held.capture());
+        assertEquals(SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE, held.getValue().purpose());
+        assertEquals(0, SHIPPING.compareTo(held.getValue().pendingEscrowBalance()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(held.getValue().availableBalance()));
+        verifyNoInteractions(driverWalletRepository);
+    }
+
+    @Test
+    void everyRupiahTakenFromTheCustomerIsCreditedSomewhere() {
+        givenCustomerWallet(new BigDecimal("200000.00"));
+
+        escrowService.createEscrowHold(driverlessCommand());
+
+        ArgumentCaptor<MerchantWallet> merchant = ArgumentCaptor.forClass(MerchantWallet.class);
+        ArgumentCaptor<SuspenseWallet> suspense = ArgumentCaptor.forClass(SuspenseWallet.class);
+        verify(merchantWalletRepository).save(merchant.capture());
+        verify(suspenseWalletRepository).save(suspense.capture());
+
+        BigDecimal credited = merchant.getValue().pendingEscrowBalance()
+            .add(suspense.getValue().pendingEscrowBalance());
+        assertEquals(0, TOTAL.compareTo(credited),
+            "the customer was debited " + TOTAL + " but only " + credited + " was credited"
+        );
+    }
+
+    @Test
+    void releasingADriverlessHoldTurnsTheFeeIntoASettledDebtAndRecordsIt() {
+        givenDriverlessHold(EscrowHold.EscrowStatus.HELD);
+        when(merchantWalletRepository.findByMerchantPrincipalIdForUpdate(MERCHANT))
+            .thenReturn(Optional.of(MerchantWallet.createInitial(MERCHANT).addPendingEscrow(MERCHANT_AMOUNT)));
+        when(suspenseWalletRepository.findByPurposeForUpdate(SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE))
+            .thenReturn(Optional.of(
+                SuspenseWallet.createInitial(SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE)
+                    .addPendingEscrow(SHIPPING)
+            ));
+
+        escrowService.releaseEscrow(ORDER);
+
+        ArgumentCaptor<SuspenseWallet> settled = ArgumentCaptor.forClass(SuspenseWallet.class);
+        verify(suspenseWalletRepository).save(settled.capture());
+        assertEquals(0, SHIPPING.compareTo(settled.getValue().availableBalance()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(settled.getValue().pendingEscrowBalance()));
+
+        verify(paymentTransactionRepository).save(argThat((PaymentTransaction t) ->
+            t.type() == PaymentTransaction.TransactionType.SHIPPING_FEE
+                && t.principalId().equals(SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE)
+                && t.amount().compareTo(SHIPPING) == 0
+        ));
+    }
+
+    @Test
+    void refundingADriverlessHoldGivesTheHeldFeeBackSoItIsNotCountedTwice() {
+        givenDriverlessHold(EscrowHold.EscrowStatus.HELD);
+        when(suspenseWalletRepository.findByPurposeForUpdate(SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE))
+            .thenReturn(Optional.of(
+                SuspenseWallet.createInitial(SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE)
+                    .addPendingEscrow(SHIPPING)
+            ));
+
+        escrowService.refundEscrow(ORDER, "customer cancelled", null);
+
+        ArgumentCaptor<SuspenseWallet> given = ArgumentCaptor.forClass(SuspenseWallet.class);
+        verify(suspenseWalletRepository).save(given.capture());
+        assertEquals(0, BigDecimal.ZERO.compareTo(given.getValue().pendingEscrowBalance()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(given.getValue().availableBalance()));
+    }
+
+    @Test
+    void anOrderWithNoShippingFeeTouchesNoSuspenseBalance() {
+        givenCustomerWallet(new BigDecimal("200000.00"));
+
+        escrowService.createEscrowHold(new CreateEscrowHoldCommand(
+            ORDER, CUSTOMER, MERCHANT, null, MERCHANT_AMOUNT, MERCHANT_AMOUNT, BigDecimal.ZERO,
+            null, "fp-no-shipping"
+        ));
+
+        verifyNoInteractions(suspenseWalletRepository, driverWalletRepository);
+    }
+
+    @Test
+    void aHoldWhosePartsDoNotAddUpToTheTotalIsRefused() {
+        givenCustomerWallet(new BigDecimal("500000.00"));
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class, () ->
+            escrowService.createEscrowHold(new CreateEscrowHoldCommand(
+                ORDER, CUSTOMER, MERCHANT, null, TOTAL, MERCHANT_AMOUNT, new BigDecimal("5000.00"),
+                null, "fp-unbalanced"
+            ))
+        );
+        assertTrue(refused.getMessage().contains("does not balance"), refused.getMessage());
+        verifyNoInteractions(suspenseWalletRepository);
+        verify(merchantWalletRepository, never()).save(any());
+    }
+
+    private CreateEscrowHoldCommand driverlessCommand() {
+        return new CreateEscrowHoldCommand(
+            ORDER, CUSTOMER, MERCHANT, null, TOTAL, MERCHANT_AMOUNT, SHIPPING,
+            null, "fp-driverless"
+        );
+    }
+
+    private void givenDriverlessHold(EscrowHold.EscrowStatus status) {
+        EscrowHold hold = new EscrowHold(
+            42L, ORDER, CUSTOMER, MERCHANT, null, TOTAL, MERCHANT_AMOUNT, SHIPPING,
+            status, Instant.now().plusSeconds(3600), Instant.now(), null
+        );
+        when(escrowRepository.findByOrderNumberForUpdate(ORDER)).thenReturn(Optional.of(hold));
+        when(escrowRepository.findByOrderNumber(ORDER)).thenReturn(Optional.of(hold));
     }
 
     private CreateEscrowHoldCommand command(BigDecimal total) {

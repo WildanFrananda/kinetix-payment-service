@@ -20,7 +20,8 @@ public record PaymentTransaction(
         TOPUP,
         CHECKOUT_PAYMENT,
         ESCROW_RELEASE,
-        REFUND
+        REFUND,
+        SHIPPING_FEE
     }
 
     public enum PaymentMethod {

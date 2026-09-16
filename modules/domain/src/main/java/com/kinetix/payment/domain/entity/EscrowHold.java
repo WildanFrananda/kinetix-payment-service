@@ -42,6 +42,14 @@ public record EscrowHold(
         BigDecimal merchantAmount,
         BigDecimal shippingFeeAmount
     ) {
+        BigDecimal parts = merchantAmount.add(shippingFeeAmount);
+        if (totalOrderAmount.compareTo(parts) != 0) {
+            throw new IllegalArgumentException(
+                "an escrow hold for order " + orderNumber + " does not balance: the customer is charged "
+                    + totalOrderAmount + " but " + merchantAmount + " is owed to the merchant and "
+                    + shippingFeeAmount + " to whoever delivers, which is " + parts
+            );
+        }
         return new EscrowHold(
             null,
             orderNumber,

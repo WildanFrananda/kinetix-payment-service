@@ -64,12 +64,13 @@ class ReviewProbeIntegrationTest {
     @Autowired private MerchantWalletAdapter merchantWalletRepository;
     @Autowired private DriverWalletAdapter driverWalletRepository;
     @Autowired private PaymentTransactionAdapter paymentTransactionRepository;
+    @Autowired private SuspenseWalletAdapter suspenseWalletRepository;
     @Autowired private EscrowIdempotencyAdapter idempotencyRepository;
 
     private EscrowService escrow() {
         return new EscrowService(escrowRepository, customerWalletRepository, merchantWalletRepository,
-            driverWalletRepository, paymentTransactionRepository, idempotencyRepository,
-            transactionRunner, advisoryLock
+            driverWalletRepository, suspenseWalletRepository, paymentTransactionRepository,
+            idempotencyRepository, transactionRunner, advisoryLock
         );
     }
 
@@ -143,8 +144,8 @@ class ReviewProbeIntegrationTest {
     ) throws Exception {
         EscrowService escrow = new EscrowService(
             escrowRepository, customerWalletRepository,
-            merchantWalletRepository, driverWalletRepository, paymentTransactionRepository,
-            idempotencyRepository, transactionRunner, lock
+            merchantWalletRepository, driverWalletRepository, suspenseWalletRepository,
+            paymentTransactionRepository, idempotencyRepository, transactionRunner, lock
         );
         List<String> violations = new CopyOnWriteArrayList<>();
         List<String> shapes = new CopyOnWriteArrayList<>();
