@@ -70,6 +70,25 @@ kinetix:
     # payment_service.proto and is the caller escrow exists for. mTLS proves a peer holds a
     # certificate from our CA, which every service does; this is what makes the surface narrow.
     allowed-callers: ${GRPC_ALLOWED_CALLERS}
+  reconciliation:
+    # Defaults, not required environment. These are cadences, not credentials or topology: a wrong
+    # value costs a little gateway traffic, and refusing to start over an unset one would take the
+    # service down for something it can pick sensibly itself.
+    #
+    # How late a top-up has to be before it is asked about. Midtrans normally calls the notification
+    # URL within seconds, so ten minutes is well past "in flight" and still well inside the window
+    # where a customer is waiting for money they have already paid.
+    pending-top-up-age: ${RECONCILIATION_PENDING_TOPUP_AGE:10m}
+    top-up-interval: ${RECONCILIATION_TOPUP_INTERVAL:5m}
+    # Most PENDING rows are top-ups the customer started and abandoned; they stay PENDING until the
+    # gateway expires them, and each one costs a status call. 100 per run drains a real backlog over
+    # a few sweeps without turning one run into a long burst of gateway traffic.
+    top-up-batch-size: ${RECONCILIATION_TOPUP_BATCH_SIZE:100}
+    escrow-interval: ${RECONCILIATION_ESCROW_INTERVAL:5m}
+    # Both sweeps wait out startup rather than running against a context that is still wiring itself,
+    # and they are offset from each other so two sets of wallet locks are not taken at the same moment.
+    top-up-initial-delay: ${RECONCILIATION_TOPUP_INITIAL_DELAY:60s}
+    escrow-initial-delay: ${RECONCILIATION_ESCROW_INITIAL_DELAY:90s}
 
 grpc:
   server:

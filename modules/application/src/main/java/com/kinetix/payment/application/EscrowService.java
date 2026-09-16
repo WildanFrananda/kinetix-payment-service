@@ -158,11 +158,25 @@ public class EscrowService {
         return escrowRepository.findByOrderNumber(orderNumber).orElse(null);
     }
 
-    public void processAutoReleaseJob() {
+    public int processAutoReleaseJob() {
         List<EscrowHold> pendingHolds = escrowRepository.findPendingAutoReleaseHolds();
-        for (EscrowHold hold : pendingHolds) {
-            releaseEscrow(hold.orderNumber());
+        if (pendingHolds.isEmpty()) {
+            return 0;
         }
+        LOG.info("auto-releasing {} escrow hold(s) whose release time has passed", pendingHolds.size());
+
+        int released = 0;
+        for (EscrowHold hold : pendingHolds) {
+            try {
+                releaseEscrow(hold.orderNumber());
+                released++;
+            } catch (RuntimeException failure) {
+                LOG.error("auto-release of escrow for order {} failed and the money stays held: {}",
+                    hold.orderNumber(), failure.getMessage()
+                );
+            }
+        }
+        return released;
     }
 
     private EscrowOutcome applyCreateHold(
