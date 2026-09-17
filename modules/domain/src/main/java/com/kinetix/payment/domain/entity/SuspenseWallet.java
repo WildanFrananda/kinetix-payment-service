@@ -73,4 +73,25 @@ public record SuspenseWallet(
             Instant.now()
         );
     }
+
+    public SuspenseWallet debitAvailable(BigDecimal amount) {
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("A suspense payout must be a positive amount");
+        }
+        if (availableBalance.compareTo(amount) < 0) {
+            throw new IllegalArgumentException(
+                "suspense wallet " + purpose + " holds " + availableBalance
+                    + " and cannot pay out " + amount
+            );
+        }
+        return new SuspenseWallet(
+            id,
+            purpose,
+            availableBalance.subtract(amount),
+            pendingEscrowBalance,
+            currency,
+            createdAt,
+            Instant.now()
+        );
+    }
 }

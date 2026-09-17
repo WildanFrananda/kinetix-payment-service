@@ -107,7 +107,7 @@ class EscrowRequestFingerprintTest {
         return new EscrowHold(
             42L, ORDER, CUSTOMER, MERCHANT, DRIVER,
             new BigDecimal("150000.00"), new BigDecimal("130000.00"), new BigDecimal("20000.00"),
-            EscrowHold.EscrowStatus.HELD, Instant.now().plusSeconds(3600), Instant.now(), null
+            EscrowHold.EscrowStatus.HELD, Instant.now().plusSeconds(3600), Instant.now(), null, null
         );
     }
 }

@@ -568,3 +568,18 @@ databaseChangeLog:
         columnNames: purpose
         constraintName: UC_SUSPENSE_WALLETSPURPOSE_COL
         tableName: suspense_wallets
+- changeSet:
+    id: 1789535450104-40
+    author: super
+    comment: >-
+      When a driver is paid their shipping fee. Nullable, and null on every existing row: those
+      holds were created before a fee could be settled to anybody, and backfilling a timestamp
+      would claim a payment that never happened. The 48-hour release reads this to know whether the
+      fee still needs routing, so a wrong value here pays twice or not at all.
+    changes:
+    - addColumn:
+        tableName: escrow_holds
+        columns:
+        - column:
+            name: shipping_fee_settled_at
+            type: TIMESTAMP(6) WITH TIME ZONE

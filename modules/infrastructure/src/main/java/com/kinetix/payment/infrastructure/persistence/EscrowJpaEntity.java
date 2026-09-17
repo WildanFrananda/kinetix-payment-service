@@ -46,9 +46,12 @@ public class EscrowJpaEntity {
     @Column(name = "released_at")
     private Instant releasedAt;
 
+    @Column(name = "shipping_fee_settled_at")
+    private Instant shippingFeeSettledAt;
+
     public EscrowJpaEntity() {}
 
-    public EscrowJpaEntity(Long id, String orderNumber, String customerPrincipalId, String merchantPrincipalId, String driverPrincipalId, BigDecimal totalOrderAmount, BigDecimal merchantAmount, BigDecimal shippingFeeAmount, EscrowHold.EscrowStatus status, Instant autoReleaseAt, Instant createdAt, Instant releasedAt) {
+    public EscrowJpaEntity(Long id, String orderNumber, String customerPrincipalId, String merchantPrincipalId, String driverPrincipalId, BigDecimal totalOrderAmount, BigDecimal merchantAmount, BigDecimal shippingFeeAmount, EscrowHold.EscrowStatus status, Instant autoReleaseAt, Instant createdAt, Instant releasedAt, Instant shippingFeeSettledAt) {
         this.id = id;
         this.orderNumber = orderNumber;
         this.customerPrincipalId = customerPrincipalId;
@@ -61,6 +64,7 @@ public class EscrowJpaEntity {
         this.autoReleaseAt = autoReleaseAt;
         this.createdAt = createdAt;
         this.releasedAt = releasedAt;
+        this.shippingFeeSettledAt = shippingFeeSettledAt;
     }
 
     public Long getId() { return id; }
@@ -75,4 +79,5 @@ public class EscrowJpaEntity {
     public Instant getAutoReleaseAt() { return autoReleaseAt; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getReleasedAt() { return releasedAt; }
+    public Instant getShippingFeeSettledAt() { return shippingFeeSettledAt; }
 }
