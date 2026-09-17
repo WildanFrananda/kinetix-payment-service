@@ -135,6 +135,94 @@ public class EscrowService {
         }
     }
 
+    public EscrowOutcome settleShippingFee(String orderNumber, String driverPrincipalId) {
+        if (driverPrincipalId == null || driverPrincipalId.isBlank()) {
+            throw new IllegalArgumentException(
+                "a shipping fee cannot be settled without naming the driver it is owed to"
+            );
+        }
+        return inOrderTransaction(orderNumber,
+            () -> applySettleShippingFee(orderNumber, driverPrincipalId)
+        );
+    }
+
+    private EscrowOutcome applySettleShippingFee(String orderNumber, String driverPrincipalId) {
+        EscrowHold hold = escrowRepository.findByOrderNumberForUpdate(orderNumber)
+            .orElseThrow(() -> new EscrowNotFoundException(
+                "Escrow hold not found for order: " + orderNumber
+            ));
+
+        if (hold.status() == EscrowHold.EscrowStatus.REFUNDED) {
+            throw new DomainException("escrow for order " + orderNumber
+                + " was refunded to the customer; there is no shipping fee left to pay"
+            );
+        }
+
+        if (hold.shippingFeeSettled()) {
+            if (driverPrincipalId.equals(hold.driverPrincipalId())) {
+                return new EscrowOutcome(hold, true);
+            }
+            throw new DomainException("the shipping fee for order " + orderNumber
+                + " was already settled to " + hold.driverPrincipalId()
+                + " and cannot be re-pointed at " + driverPrincipalId
+            );
+        }
+
+        if (hold.status() == EscrowHold.EscrowStatus.RELEASED && hasDriver(hold.driverPrincipalId())) {
+            throw new DomainException("the shipping fee for order " + orderNumber
+                + " was already paid to " + hold.driverPrincipalId() + " when the escrow was released"
+            );
+        }
+
+        if (!isMoney(hold.shippingFeeAmount())) {
+            return new EscrowOutcome(
+                escrowRepository.save(hold.settleShippingFeeTo(driverPrincipalId)), false
+            );
+        }
+
+        lockWalletOwners(
+            driverPrincipalId,
+            shippingFeeHolder(hold.driverPrincipalId()),
+            SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE
+        );
+
+        DriverWallet driverWallet = driverWalletRepository
+            .findByDriverPrincipalIdForUpdate(driverPrincipalId)
+            .orElseGet(() -> DriverWallet.createInitial(driverPrincipalId));
+
+        if (hold.status() == EscrowHold.EscrowStatus.HELD && hasDriver(hold.driverPrincipalId())) {
+            if (!driverPrincipalId.equals(hold.driverPrincipalId())) {
+                throw new DomainException("order " + orderNumber + " holds its shipping fee pending"
+                    + " for " + hold.driverPrincipalId() + ", so it cannot be settled to "
+                    + driverPrincipalId + " without first releasing that hold"
+                );
+            }
+            driverWalletRepository.save(
+                driverWallet.releaseEscrowToAvailable(hold.shippingFeeAmount())
+            );
+        } else if (hold.status() == EscrowHold.EscrowStatus.HELD) {
+            suspenseWalletRepository.save(
+                unassignedDriverFees().cancelPendingEscrow(hold.shippingFeeAmount())
+            );
+            driverWalletRepository.save(
+                driverWallet.releaseEscrowToAvailable(hold.shippingFeeAmount())
+            );
+        } else {
+            suspenseWalletRepository.save(
+                unassignedDriverFees().debitAvailable(hold.shippingFeeAmount())
+            );
+            driverWalletRepository.save(
+                driverWallet.releaseEscrowToAvailable(hold.shippingFeeAmount())
+            );
+        }
+
+        EscrowHold settled = escrowRepository.save(hold.settleShippingFeeTo(driverPrincipalId));
+        recordLedgerEntry(PaymentTransaction.TransactionType.SHIPPING_FEE,
+            orderNumber, driverPrincipalId, hold.shippingFeeAmount());
+
+        return new EscrowOutcome(settled, false);
+    }
+
     public EscrowOutcome refundEscrow(String orderNumber, String reason, String idempotencyKey) {
         String key = resolveKey(idempotencyKey, orderNumber);
         IdempotencyKeySource source = sourceOf(idempotencyKey, EscrowOperation.REFUND, orderNumber);
@@ -326,7 +414,11 @@ public class EscrowService {
             .orElseGet(() -> MerchantWallet.createInitial(hold.merchantPrincipalId()));
         merchantWalletRepository.save(merchantWallet.releaseEscrowToAvailable(hold.merchantAmount()));
 
-        if (hasDriver(hold.driverPrincipalId())) {
+        if (hold.shippingFeeSettled()) {
+            LOG.debug("escrow release for order {}: shipping fee already settled to {}",
+                orderNumber, hold.driverPrincipalId()
+            );
+        } else if (hasDriver(hold.driverPrincipalId())) {
             DriverWallet driverWallet = driverWalletRepository
                 .findByDriverPrincipalIdForUpdate(hold.driverPrincipalId())
                 .orElseGet(() -> DriverWallet.createInitial(hold.driverPrincipalId()));
@@ -388,6 +480,14 @@ public class EscrowService {
             );
         }
         requireStillHeld(hold, "refunded");
+
+        if (hold.shippingFeeSettled()) {
+            throw new DomainException("order " + hold.orderNumber() + " has already paid its"
+                + " shipping fee to " + hold.driverPrincipalId() + " for a completed delivery."
+                + " Refunding the full amount here would take that fee from nobody's account and"
+                + " leave no record of it. Refund the merchant amount deliberately instead."
+            );
+        }
 
         lockWalletOwners(hold.customerPrincipalId(), hold.merchantPrincipalId(),
             shippingFeeHolder(hold.driverPrincipalId())

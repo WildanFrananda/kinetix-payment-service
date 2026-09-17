@@ -1,6 +1,7 @@
 package com.kinetix.payment.application;
 
 import com.kinetix.payment.domain.entity.CustomerWallet;
+import com.kinetix.payment.domain.entity.DriverWallet;
 import com.kinetix.payment.domain.entity.EscrowHold;
 import com.kinetix.payment.domain.entity.EscrowIdempotencyRecord;
 import com.kinetix.payment.domain.entity.EscrowOperation;
@@ -491,10 +492,139 @@ class EscrowServiceTest {
         );
     }
 
+    @Test
+    void settlingADeliveredOrderPaysTheDriverOutOfWhatWasHeldPending() {
+        givenHold(EscrowHold.EscrowStatus.HELD, null, null);
+        givenSuspense(BigDecimal.ZERO, SHIPPING);
+
+        EscrowOutcome outcome = escrowService.settleShippingFee(ORDER, DRIVER);
+
+        assertFalse(outcome.alreadyApplied());
+        assertEquals(DRIVER, outcome.hold().driverPrincipalId());
+        assertNotNull(outcome.hold().shippingFeeSettledAt());
+        assertEquals(0, savedDriverWallet().availableBalance().compareTo(SHIPPING));
+        assertEquals(0, savedSuspense().pendingEscrowBalance().compareTo(BigDecimal.ZERO));
+    }
+
+    @Test
+    void settlingAnAlreadyReleasedOrderDrainsTheSuspenseWallet() {
+        givenHold(EscrowHold.EscrowStatus.RELEASED, null, null);
+        givenSuspense(SHIPPING, BigDecimal.ZERO);
+
+        escrowService.settleShippingFee(ORDER, DRIVER);
+
+        assertEquals(0, savedSuspense().availableBalance().compareTo(BigDecimal.ZERO));
+        assertEquals(0, savedDriverWallet().availableBalance().compareTo(SHIPPING));
+    }
+
+    @Test
+    void suspenseCannotPayOutMoreThanItHolds() {
+        givenHold(EscrowHold.EscrowStatus.RELEASED, null, null);
+        givenSuspense(new BigDecimal("5000.00"), BigDecimal.ZERO);
+
+        assertThrows(IllegalArgumentException.class,
+            () -> escrowService.settleShippingFee(ORDER, DRIVER)
+        );
+        verify(driverWalletRepository, never()).save(any());
+    }
+
+    @Test
+    void settlingTwiceToTheSameDriverMovesNoMoreMoney() {
+        givenHold(EscrowHold.EscrowStatus.RELEASED, DRIVER, Instant.now().minusSeconds(60));
+
+        EscrowOutcome outcome = escrowService.settleShippingFee(ORDER, DRIVER);
+
+        assertTrue(outcome.alreadyApplied());
+        verify(driverWalletRepository, never()).save(any());
+        verify(suspenseWalletRepository, never()).save(any());
+    }
+
+    @Test
+    void aSettledShippingFeeCannotBeRePointedAtAnotherDriver() {
+        givenHold(EscrowHold.EscrowStatus.RELEASED, DRIVER, Instant.now().minusSeconds(60));
+
+        assertThrows(DomainException.class,
+            () -> escrowService.settleShippingFee(ORDER, "0d4f6b2a-7c31-4e59-9a80-13b5cf27e604")
+        );
+        verify(driverWalletRepository, never()).save(any());
+    }
+
+    @Test
+    void aReleasedHoldThatAlreadyPaidItsDriverIsNotPaidAgain() {
+        givenHold(EscrowHold.EscrowStatus.RELEASED, DRIVER, null);
+
+        assertThrows(DomainException.class, () -> escrowService.settleShippingFee(ORDER, DRIVER));
+        verify(driverWalletRepository, never()).save(any());
+    }
+
+    @Test
+    void aRefundedOrderHasNoShippingFeeLeftToPay() {
+        givenHold(EscrowHold.EscrowStatus.REFUNDED, null, null);
+
+        assertThrows(DomainException.class, () -> escrowService.settleShippingFee(ORDER, DRIVER));
+        verify(driverWalletRepository, never()).save(any());
+    }
+
+    @Test
+    void aFeeCannotBeSettledWithoutNamingADriver() {
+        assertThrows(IllegalArgumentException.class, () -> escrowService.settleShippingFee(ORDER, " "));
+    }
+
+    @Test
+    void theFortyEightHourReleaseLeavesAnAlreadySettledFeeAlone() {
+        givenHold(EscrowHold.EscrowStatus.HELD, DRIVER, Instant.now().minusSeconds(60));
+
+        escrowService.releaseEscrow(ORDER);
+
+        verify(merchantWalletRepository).save(any());
+        verify(driverWalletRepository, never()).save(any());
+        verify(suspenseWalletRepository, never()).save(any());
+    }
+
+    @Test
+    void refundIsRefusedOnceTheDriverHasBeenPaid() {
+        givenHold(EscrowHold.EscrowStatus.HELD, DRIVER, Instant.now().minusSeconds(60));
+
+        assertThrows(DomainException.class,
+            () -> escrowService.refundEscrow(ORDER, "customer changed their mind", null)
+        );
+        verify(customerWalletRepository, never()).save(any());
+    }
+
+    private void givenHold(EscrowHold.EscrowStatus status, String driver, Instant settledAt) {
+        EscrowHold hold = new EscrowHold(
+            42L, ORDER, CUSTOMER, MERCHANT, driver, TOTAL, MERCHANT_AMOUNT, SHIPPING,
+            status, Instant.now().plusSeconds(3600), Instant.now(), null, settledAt
+        );
+        when(escrowRepository.findByOrderNumberForUpdate(ORDER)).thenReturn(Optional.of(hold));
+        when(escrowRepository.findByOrderNumber(ORDER)).thenReturn(Optional.of(hold));
+    }
+
+    private void givenSuspense(BigDecimal available, BigDecimal pending) {
+        when(suspenseWalletRepository.findByPurposeForUpdate(
+            SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE
+        )).thenReturn(Optional.of(new SuspenseWallet(
+            9L, SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE, available, pending, "IDR",
+            Instant.now(), Instant.now()
+        )));
+    }
+
+    private DriverWallet savedDriverWallet() {
+        ArgumentCaptor<DriverWallet> captor = ArgumentCaptor.forClass(DriverWallet.class);
+        verify(driverWalletRepository).save(captor.capture());
+        return captor.getValue();
+    }
+
+    private SuspenseWallet savedSuspense() {
+        ArgumentCaptor<SuspenseWallet> captor = ArgumentCaptor.forClass(SuspenseWallet.class);
+        verify(suspenseWalletRepository).save(captor.capture());
+        return captor.getValue();
+    }
+
     private void givenDriverlessHold(EscrowHold.EscrowStatus status) {
         EscrowHold hold = new EscrowHold(
             42L, ORDER, CUSTOMER, MERCHANT, null, TOTAL, MERCHANT_AMOUNT, SHIPPING,
-            status, Instant.now().plusSeconds(3600), Instant.now(), null
+            status, Instant.now().plusSeconds(3600), Instant.now(), null, null
         );
         when(escrowRepository.findByOrderNumberForUpdate(ORDER)).thenReturn(Optional.of(hold));
         when(escrowRepository.findByOrderNumber(ORDER)).thenReturn(Optional.of(hold));
@@ -528,7 +658,7 @@ class EscrowServiceTest {
     private void givenExistingHold(EscrowHold.EscrowStatus status) {
         EscrowHold hold = new EscrowHold(
             42L, ORDER, CUSTOMER, MERCHANT, DRIVER, TOTAL, MERCHANT_AMOUNT, SHIPPING,
-            status, Instant.now().plusSeconds(3600), Instant.now(), null
+            status, Instant.now().plusSeconds(3600), Instant.now(), null, null
         );
         when(escrowRepository.findByOrderNumberForUpdate(ORDER)).thenReturn(Optional.of(hold));
         when(escrowRepository.findByOrderNumber(ORDER)).thenReturn(Optional.of(hold));
@@ -585,7 +715,7 @@ class EscrowServiceTest {
     private EscrowHold dueHold(String orderNumber) {
         return new EscrowHold(
             42L, orderNumber, CUSTOMER, MERCHANT, DRIVER, TOTAL, MERCHANT_AMOUNT, SHIPPING,
-            EscrowHold.EscrowStatus.HELD, Instant.now().minusSeconds(60), Instant.now(), null
+            EscrowHold.EscrowStatus.HELD, Instant.now().minusSeconds(60), Instant.now(), null, null
         );
     }
 
@@ -600,7 +730,7 @@ class EscrowServiceTest {
             id, hold.orderNumber(), hold.customerPrincipalId(), hold.merchantPrincipalId(),
             hold.driverPrincipalId(), hold.totalOrderAmount(), hold.merchantAmount(),
             hold.shippingFeeAmount(), hold.status(), hold.autoReleaseAt(), hold.createdAt(),
-            hold.releasedAt()
+            hold.releasedAt(), hold.shippingFeeSettledAt()
         );
     }
 

@@ -50,7 +50,8 @@ public class EscrowAdapter implements EscrowRepositoryPort {
             hold.status(),
             hold.autoReleaseAt(),
             hold.createdAt(),
-            hold.releasedAt()
+            hold.releasedAt(),
+            hold.shippingFeeSettledAt()
         );
         try {
             return toDomain(jpaRepository.saveAndFlush(entity));
@@ -72,7 +73,8 @@ public class EscrowAdapter implements EscrowRepositoryPort {
             entity.getStatus(),
             entity.getAutoReleaseAt(),
             entity.getCreatedAt(),
-            entity.getReleasedAt()
+            entity.getReleasedAt(),
+            entity.getShippingFeeSettledAt()
         );
     }
 }

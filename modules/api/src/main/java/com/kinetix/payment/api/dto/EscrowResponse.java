@@ -16,7 +16,8 @@ public record EscrowResponse(
     String status,
     Instant autoReleaseAt,
     Instant createdAt,
-    Instant releasedAt
+    Instant releasedAt,
+    Instant shippingFeeSettledAt
 ) {
     public static EscrowResponse from(EscrowHold hold) {
         return new EscrowResponse(
@@ -31,7 +32,8 @@ public record EscrowResponse(
             hold.status().name(),
             hold.autoReleaseAt(),
             hold.createdAt(),
-            hold.releasedAt()
+            hold.releasedAt(),
+            hold.shippingFeeSettledAt()
         );
     }
 }

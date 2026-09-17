@@ -15,7 +15,8 @@ public record EscrowHold(
     EscrowStatus status,
     Instant autoReleaseAt,
     Instant createdAt,
-    Instant releasedAt
+    Instant releasedAt,
+    Instant shippingFeeSettledAt
 ) {
     public EscrowHold {
         if (customerPrincipalId == null || customerPrincipalId.isBlank()) {
@@ -62,7 +63,41 @@ public record EscrowHold(
             EscrowStatus.HELD,
             Instant.now().plusSeconds(48 * 3600),
             Instant.now(),
+            null,
             null
+        );
+    }
+
+    public boolean shippingFeeSettled() {
+        return shippingFeeSettledAt != null;
+    }
+
+    public EscrowHold settleShippingFeeTo(String settledDriverPrincipalId) {
+        if (settledDriverPrincipalId == null || settledDriverPrincipalId.isBlank()) {
+            throw new IllegalArgumentException(
+                "a shipping fee cannot be settled without naming the driver it is owed to"
+            );
+        }
+        if (shippingFeeSettledAt != null) {
+            throw new IllegalStateException(
+                "the shipping fee for order " + orderNumber + " was already settled to "
+                    + driverPrincipalId + " at " + shippingFeeSettledAt
+            );
+        }
+        return new EscrowHold(
+            id,
+            orderNumber,
+            customerPrincipalId,
+            merchantPrincipalId,
+            settledDriverPrincipalId,
+            totalOrderAmount,
+            merchantAmount,
+            shippingFeeAmount,
+            status,
+            autoReleaseAt,
+            createdAt,
+            releasedAt,
+            Instant.now()
         );
     }
 
@@ -79,7 +114,8 @@ public record EscrowHold(
             EscrowStatus.REFUNDED,
             autoReleaseAt,
             createdAt,
-            Instant.now()
+            Instant.now(),
+            shippingFeeSettledAt
         );
     }
 
@@ -96,7 +132,8 @@ public record EscrowHold(
             EscrowStatus.RELEASED,
             autoReleaseAt,
             createdAt,
-            Instant.now()
+            Instant.now(),
+            shippingFeeSettledAt
         );
     }
 }
