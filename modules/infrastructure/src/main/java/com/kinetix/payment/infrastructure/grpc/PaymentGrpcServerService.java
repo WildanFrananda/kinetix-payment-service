@@ -118,6 +118,25 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
     }
 
     @Override
+    public void settleShippingFee(
+        Payment.SettleShippingFeeRequest request,
+        StreamObserver<Payment.EscrowHoldResponse> responseObserver
+    ) {
+        Payment.EscrowHoldResponse response;
+        try {
+            response = toResponse(escrowService.settleShippingFee(
+                request.getOrderNumber(),
+                request.getDriverPrincipalId()
+            ));
+        } catch (RuntimeException failure) {
+            responseObserver.onError(toStatusException(failure));
+            return;
+        }
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
+    }
+
+    @Override
     public void getEscrowStatus(
         Payment.GetEscrowStatusRequest request,
         StreamObserver<Payment.EscrowHoldResponse> responseObserver
@@ -170,6 +189,9 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
         }
         if (hold.releasedAt() != null) {
             builder.setReleasedAt(toTimestamp(hold.releasedAt()));
+        }
+        if (hold.shippingFeeSettledAt() != null) {
+            builder.setShippingFeeSettledAt(toTimestamp(hold.shippingFeeSettledAt()));
         }
 
         return builder.build();
