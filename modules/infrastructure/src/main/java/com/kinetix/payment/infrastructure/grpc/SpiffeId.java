@@ -3,6 +3,7 @@ package com.kinetix.payment.infrastructure.grpc;
 import java.net.URI;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -10,18 +11,28 @@ import java.util.Optional;
 public final class SpiffeId {
     private static final String DEFAULT_TRUST_DOMAIN = "kinetix.local";
 
-    static final String TRUST_DOMAIN = prefixFor(configuredTrustDomain());
+    static final List<String> TRUST_PREFIXES = configuredTrustDomains().stream()
+            .map(SpiffeId::prefixFor)
+            .toList();
+
+    static final String TRUST_DOMAIN = TRUST_PREFIXES.get(0);
 
     private static final int URI_SAN = 6;
 
     private SpiffeId() {}
 
-    private static String configuredTrustDomain() {
+    private static List<String> configuredTrustDomains() {
         String configured = System.getenv("KINETIX_TRUST_DOMAIN");
         if (configured == null || configured.isBlank()) {
-            return DEFAULT_TRUST_DOMAIN;
+            return List.of(DEFAULT_TRUST_DOMAIN);
         }
-        return configured.trim();
+
+        List<String> named = Arrays.stream(configured.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .toList();
+
+        return named.isEmpty() ? List.of(DEFAULT_TRUST_DOMAIN) : named;
     }
 
     static String prefixFor(String domain) {
@@ -63,7 +74,12 @@ public final class SpiffeId {
             } catch (IllegalArgumentException notAUri) {
                 continue;
             }
-            Optional<String> service = serviceIn(uri.toString(), TRUST_DOMAIN);
+            String id = uri.toString();
+            Optional<String> service = TRUST_PREFIXES.stream()
+                    .map(prefix -> serviceIn(id, prefix))
+                    .flatMap(Optional::stream)
+                    .findFirst();
+
             if (service.isEmpty()) {
                 continue;
             }

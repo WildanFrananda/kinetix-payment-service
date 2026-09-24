@@ -9,6 +9,28 @@ class SpiffeTrustDomainTest {
     @Test
     void anUnsetVariableKeepsTheDomainTheEstateRunsToday() {
         assertEquals("spiffe://kinetix.local/service/", SpiffeId.TRUST_DOMAIN);
+        assertEquals(java.util.List.of("spiffe://kinetix.local/service/"), SpiffeId.TRUST_PREFIXES);
+    }
+
+    @Test
+    void aCutoverCanAcceptBothDomainsAtOnce() {
+        var both = java.util.List.of(SpiffeId.prefixFor("kinetix.local"), SpiffeId.prefixFor("prod.kinetix"));
+
+        for (String domain : java.util.List.of("kinetix.local", "prod.kinetix")) {
+            String id = "spiffe://" + domain + "/service/order";
+            var named = both.stream().map(p -> SpiffeId.serviceIn(id, p)).flatMap(Optional::stream).findFirst();
+            assertEquals(Optional.of("order"), named);
+        }
+    }
+
+    @Test
+    void aDomainOutsideTheListIsStillRefused() {
+        var both = java.util.List.of(SpiffeId.prefixFor("kinetix.local"), SpiffeId.prefixFor("prod.kinetix"));
+        var named = both.stream()
+                .map(p -> SpiffeId.serviceIn("spiffe://staging.kinetix/service/order", p))
+                .flatMap(Optional::stream)
+                .findFirst();
+        assertTrue(named.isEmpty());
     }
 
     @Test
