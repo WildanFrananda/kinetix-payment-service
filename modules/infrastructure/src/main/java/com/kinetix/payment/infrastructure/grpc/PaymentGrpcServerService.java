@@ -118,6 +118,27 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
     }
 
     @Override
+    public void refundGoods(
+        Payment.RefundGoodsRequest request,
+        StreamObserver<Payment.EscrowHoldResponse> responseObserver
+    ) {
+        Payment.EscrowHoldResponse response;
+        try {
+            response = toResponse(escrowService.refundGoods(
+                request.getOrderNumber(),
+                goodsRefundOf(request),
+                request.getReason(),
+                idempotencyKeyOf(request.hasIdempotencyKey() ? request.getIdempotencyKey() : null)
+            ));
+        } catch (RuntimeException failure) {
+            responseObserver.onError(toStatusException(failure));
+            return;
+        }
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
+    }
+
+    @Override
     public void settleShippingFee(
         Payment.SettleShippingFeeRequest request,
         StreamObserver<Payment.EscrowHoldResponse> responseObserver
@@ -181,9 +202,7 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
                 .setStatus(toStatus(hold.status()))
                 .setAlreadyApplied(outcome.alreadyApplied());
 
-        if (hold.autoReleaseAt() != null) {
-            builder.setAutoReleaseAt(toTimestamp(hold.autoReleaseAt()));
-        }
+        builder.setGoodsRefundedAmount(toMoney(hold.goodsRefundedAmount()));
         if (hold.createdAt() != null) {
             builder.setCreatedAt(toTimestamp(hold.createdAt()));
         }
@@ -235,6 +254,18 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
             .build()
         );
         return status.withDescription(message).asRuntimeException(trailers);
+    }
+
+    private static BigDecimal goodsRefundOf(Payment.RefundGoodsRequest request) {
+        if (!request.hasAmount()) {
+            throw new IllegalArgumentException("a goods refund names the amount to refund");
+        }
+        if (!"IDR".equals(request.getAmount().getCurrency())) {
+            throw new IllegalArgumentException(
+                "a goods refund is in IDR, not '" + request.getAmount().getCurrency() + "'"
+            );
+        }
+        return fromMoney(request.getAmount());
     }
 
     private static BigDecimal fromMoney(Common.Money money) {

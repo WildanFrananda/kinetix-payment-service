@@ -1,7 +1,6 @@
 package com.kinetix.payment.api.controller;
 
 import com.kinetix.payment.api.dto.EscrowResponse;
-import com.kinetix.payment.api.dto.ReleaseEscrowRequest;
 import com.kinetix.payment.api.dto.SettleShippingFeeRequest;
 import com.kinetix.payment.api.security.AccessClaims;
 import com.kinetix.payment.api.security.ForbiddenException;
@@ -20,20 +19,6 @@ public class EscrowController {
 
     public EscrowController(EscrowService escrowService) {
         this.escrowService = escrowService;
-    }
-
-    @PostMapping("/release")
-    public ResponseEntity<EscrowResponse> releaseEscrow(
-        @AuthenticationPrincipal Jwt jwt,
-        @Valid @RequestBody ReleaseEscrowRequest request
-    ) {
-        AccessClaims caller = AccessClaims.of(jwt);
-        if (!AccessClaims.ADMIN.equals(caller.role())) {
-            throw new ForbiddenException("releasing an escrow hold is an administrative action");
-        }
-
-        EscrowHold released = escrowService.releaseEscrow(request.orderNumber()).hold();
-        return ResponseEntity.ok(EscrowResponse.from(released));
     }
 
     @PostMapping("/shipping-fee/settle")

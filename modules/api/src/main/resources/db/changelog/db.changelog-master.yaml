@@ -583,3 +583,40 @@ databaseChangeLog:
         - column:
             name: shipping_fee_settled_at
             type: TIMESTAMP(6) WITH TIME ZONE
+- changeSet:
+    id: 1791536302414-42
+    author: super (generated)
+    comment: >-
+      How much of a hold's merchant share has gone back to the buyer for returned goods. Zero on every
+      existing row, which is true: no goods refund existed before this column.
+    changes:
+    - addColumn:
+        columns:
+        - column:
+            constraints:
+              nullable: false
+            defaultValueNumeric: 0
+            name: goods_refunded_amount
+            type: numeric(12, 2)
+        tableName: escrow_holds
+- changeSet:
+    id: 1791536302414-44
+    author: super
+    comment: >-
+      The default only filled the rows that existed when the column arrived; the entity sets the value
+      on every hold it writes.
+    changes:
+    - dropDefaultValue:
+        columnDataType: numeric(12, 2)
+        columnName: goods_refunded_amount
+        tableName: escrow_holds
+- changeSet:
+    id: 1791536302414-43
+    author: super (generated)
+    comment: >-
+      A hold is released by order once the parcel is delivered and the return window has passed, not
+      by a clock that started at checkout.
+    changes:
+    - dropColumn:
+        columnName: auto_release_at
+        tableName: escrow_holds

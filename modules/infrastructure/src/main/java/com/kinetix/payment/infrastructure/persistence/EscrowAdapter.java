@@ -29,14 +29,6 @@ public class EscrowAdapter implements EscrowRepositoryPort {
     }
 
     @Override
-    public List<EscrowHold> findPendingAutoReleaseHolds() {
-        return jpaRepository.findPendingAutoReleaseHolds(EscrowHold.EscrowStatus.HELD, Instant.now())
-            .stream()
-            .map(this::toDomain)
-            .toList();
-    }
-
-    @Override
     public EscrowHold save(EscrowHold hold) {
         EscrowJpaEntity entity = new EscrowJpaEntity(
             hold.id(),
@@ -48,10 +40,10 @@ public class EscrowAdapter implements EscrowRepositoryPort {
             hold.merchantAmount(),
             hold.shippingFeeAmount(),
             hold.status(),
-            hold.autoReleaseAt(),
             hold.createdAt(),
             hold.releasedAt(),
-            hold.shippingFeeSettledAt()
+            hold.shippingFeeSettledAt(),
+            hold.goodsRefundedAmount()
         );
         try {
             return toDomain(jpaRepository.saveAndFlush(entity));
@@ -71,10 +63,10 @@ public class EscrowAdapter implements EscrowRepositoryPort {
             entity.getMerchantAmount(),
             entity.getShippingFeeAmount(),
             entity.getStatus(),
-            entity.getAutoReleaseAt(),
             entity.getCreatedAt(),
             entity.getReleasedAt(),
-            entity.getShippingFeeSettledAt()
+            entity.getShippingFeeSettledAt(),
+            entity.getGoodsRefundedAmount()
         );
     }
 }

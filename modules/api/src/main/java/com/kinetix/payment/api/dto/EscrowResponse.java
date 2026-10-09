@@ -14,10 +14,10 @@ public record EscrowResponse(
     BigDecimal merchantAmount,
     BigDecimal shippingFeeAmount,
     String status,
-    Instant autoReleaseAt,
     Instant createdAt,
     Instant releasedAt,
-    Instant shippingFeeSettledAt
+    Instant shippingFeeSettledAt,
+    BigDecimal goodsRefundedAmount
 ) {
     public static EscrowResponse from(EscrowHold hold) {
         return new EscrowResponse(
@@ -30,10 +30,10 @@ public record EscrowResponse(
             hold.merchantAmount(),
             hold.shippingFeeAmount(),
             hold.status().name(),
-            hold.autoReleaseAt(),
             hold.createdAt(),
             hold.releasedAt(),
-            hold.shippingFeeSettledAt()
+            hold.shippingFeeSettledAt(),
+            hold.goodsRefundedAmount()
         );
     }
 }

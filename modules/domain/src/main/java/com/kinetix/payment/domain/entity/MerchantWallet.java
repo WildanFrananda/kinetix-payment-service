@@ -41,7 +41,7 @@ public record MerchantWallet(
             id,
             merchantPrincipalId,
             availableBalance,
-            pendingEscrowBalance.add(amount),
+            pendingEscrowBalance.add(EscrowAmount.moving(amount)),
             currency,
             createdAt,
             Instant.now()
@@ -53,7 +53,7 @@ public record MerchantWallet(
             id,
             merchantPrincipalId,
             availableBalance,
-            pendingEscrowBalance.subtract(amount).max(BigDecimal.ZERO),
+            EscrowAmount.leaving(pendingEscrowBalance, amount, "merchant " + merchantPrincipalId),
             currency,
             createdAt,
             Instant.now()
@@ -65,7 +65,7 @@ public record MerchantWallet(
             id,
             merchantPrincipalId,
             availableBalance.add(amount),
-            pendingEscrowBalance.subtract(amount).max(BigDecimal.ZERO),
+            EscrowAmount.leaving(pendingEscrowBalance, amount, "merchant " + merchantPrincipalId),
             currency,
             createdAt,
             Instant.now()

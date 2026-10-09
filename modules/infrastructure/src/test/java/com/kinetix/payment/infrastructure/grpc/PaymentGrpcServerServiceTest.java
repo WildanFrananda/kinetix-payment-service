@@ -15,6 +15,8 @@ import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class PaymentGrpcServerServiceTest {
@@ -38,8 +40,8 @@ class PaymentGrpcServerServiceTest {
         return new EscrowHold(
             42L, ORDER, CUSTOMER, MERCHANT, driver,
             new BigDecimal("150000.00"), new BigDecimal("130000.00"), new BigDecimal("20000.00"),
-            EscrowHold.EscrowStatus.HELD, Instant.now().plusSeconds(3600), Instant.now(),
-            null, settledAt
+            EscrowHold.EscrowStatus.HELD, Instant.now(),
+            null, settledAt, BigDecimal.ZERO
         );
     }
 
@@ -105,6 +107,43 @@ class PaymentGrpcServerServiceTest {
         assertNull(observer.response);
         assertFalse(observer.completed);
         assertInstanceOf(StatusRuntimeException.class, observer.error);
+    }
+
+    private static Payment.RefundGoodsRequest goodsRefund(long minor, String currency) {
+        return Payment.RefundGoodsRequest.newBuilder()
+            .setOrderNumber(ORDER)
+            .setAmount(common.v1.Common.Money.newBuilder().setAmountMinor(minor).setCurrency(currency))
+            .setReason("returned")
+            .build();
+    }
+
+    @Test
+    void aGoodsRefundIsPassedThroughInRupiahAndAnswersWithWhatHasBeenRefunded() {
+        when(escrowService.refundGoods(any(), any(), any(), any()))
+            .thenReturn(new EscrowOutcome(hold(Instant.now(), DRIVER).refundGoods(new BigDecimal("40000.00")), false));
+
+        server.refundGoods(goodsRefund(4_000_000L, "IDR"), observer);
+
+        verify(escrowService).refundGoods(eq(ORDER), argThat(amount -> new BigDecimal("40000").compareTo(amount) == 0), eq("returned"), any());
+        assertTrue(observer.completed);
+        assertEquals(4_000_000L, observer.response.getGoodsRefundedAmount().getAmountMinor());
+    }
+
+    @Test
+    void aGoodsRefundInAnotherCurrencyIsRefusedRatherThanReadAsRupiah() {
+        server.refundGoods(goodsRefund(4_000_000L, "USD"), observer);
+
+        assertInstanceOf(StatusRuntimeException.class, observer.error);
+        assertEquals(io.grpc.Status.Code.INVALID_ARGUMENT, ((StatusRuntimeException) observer.error).getStatus().getCode());
+        verifyNoInteractions(escrowService);
+    }
+
+    @Test
+    void aGoodsRefundThatNamesNoAmountIsRefusedRatherThanReadAsZero() {
+        server.refundGoods(Payment.RefundGoodsRequest.newBuilder().setOrderNumber(ORDER).build(), observer);
+
+        assertEquals(io.grpc.Status.Code.INVALID_ARGUMENT, ((StatusRuntimeException) observer.error).getStatus().getCode());
+        verifyNoInteractions(escrowService);
     }
 
     private static final class CapturingObserver implements StreamObserver<Payment.EscrowHoldResponse> {
