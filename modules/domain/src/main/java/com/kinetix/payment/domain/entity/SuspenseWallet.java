@@ -43,7 +43,7 @@ public record SuspenseWallet(
             id,
             purpose,
             availableBalance,
-            pendingEscrowBalance.add(amount),
+            pendingEscrowBalance.add(EscrowAmount.moving(amount)),
             currency,
             createdAt,
             Instant.now()
@@ -55,7 +55,7 @@ public record SuspenseWallet(
             id,
             purpose,
             availableBalance,
-            pendingEscrowBalance.subtract(amount).max(BigDecimal.ZERO),
+            EscrowAmount.leaving(pendingEscrowBalance, amount, "suspense wallet " + purpose),
             currency,
             createdAt,
             Instant.now()
@@ -67,7 +67,7 @@ public record SuspenseWallet(
             id,
             purpose,
             availableBalance.add(amount),
-            pendingEscrowBalance.subtract(amount).max(BigDecimal.ZERO),
+            EscrowAmount.leaving(pendingEscrowBalance, amount, "suspense wallet " + purpose),
             currency,
             createdAt,
             Instant.now()

@@ -79,6 +79,10 @@ public final class EscrowRequestFingerprint {
         return digest(String.join("\n", "REFUND", text(orderNumber)));
     }
 
+    public static String forRefundGoods(String orderNumber, BigDecimal amount) {
+        return digest(String.join("\n", "REFUND_GOODS", text(orderNumber), Long.toString(toMinorUnits(amount))));
+    }
+
     public static long toMinorUnits(BigDecimal majorUnits) {
         return (majorUnits == null ? BigDecimal.ZERO : majorUnits)
             .multiply(MINOR_PER_MAJOR)

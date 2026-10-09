@@ -41,7 +41,7 @@ public record DriverWallet(
             id,
             driverPrincipalId,
             availableBalance,
-            pendingEscrowBalance.add(amount),
+            pendingEscrowBalance.add(EscrowAmount.moving(amount)),
             currency,
             createdAt,
             Instant.now()
@@ -53,7 +53,22 @@ public record DriverWallet(
             id,
             driverPrincipalId,
             availableBalance,
-            pendingEscrowBalance.subtract(amount).max(BigDecimal.ZERO),
+            EscrowAmount.leaving(pendingEscrowBalance, amount, "driver " + driverPrincipalId),
+            currency,
+            createdAt,
+            Instant.now()
+        );
+    }
+
+    public DriverWallet creditAvailable(BigDecimal amount) {
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("a credit to a driver must be a positive amount");
+        }
+        return new DriverWallet(
+            id,
+            driverPrincipalId,
+            availableBalance.add(amount),
+            pendingEscrowBalance,
             currency,
             createdAt,
             Instant.now()
@@ -65,7 +80,7 @@ public record DriverWallet(
             id,
             driverPrincipalId,
             availableBalance.add(amount),
-            pendingEscrowBalance.subtract(amount).max(BigDecimal.ZERO),
+            EscrowAmount.leaving(pendingEscrowBalance, amount, "driver " + driverPrincipalId),
             currency,
             createdAt,
             Instant.now()

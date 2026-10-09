@@ -204,16 +204,12 @@ public class EscrowService {
             suspenseWalletRepository.save(
                 unassignedDriverFees().cancelPendingEscrow(hold.shippingFeeAmount())
             );
-            driverWalletRepository.save(
-                driverWallet.releaseEscrowToAvailable(hold.shippingFeeAmount())
-            );
+            driverWalletRepository.save(driverWallet.creditAvailable(hold.shippingFeeAmount()));
         } else {
             suspenseWalletRepository.save(
                 unassignedDriverFees().debitAvailable(hold.shippingFeeAmount())
             );
-            driverWalletRepository.save(
-                driverWallet.releaseEscrowToAvailable(hold.shippingFeeAmount())
-            );
+            driverWalletRepository.save(driverWallet.creditAvailable(hold.shippingFeeAmount()));
         }
 
         EscrowHold settled = escrowRepository.save(hold.settleShippingFeeTo(driverPrincipalId));
@@ -247,29 +243,69 @@ public class EscrowService {
         }
     }
 
-    public EscrowHold findByOrderNumber(String orderNumber) {
-        return escrowRepository.findByOrderNumber(orderNumber).orElse(null);
+    public EscrowOutcome refundGoods(String orderNumber, BigDecimal amount, String reason, String idempotencyKey) {
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("a goods refund must be a positive amount");
+        }
+        String key = resolveKey(idempotencyKey, orderNumber);
+        IdempotencyKeySource source = sourceOf(idempotencyKey, EscrowOperation.REFUND_GOODS, orderNumber);
+        String fingerprint = EscrowRequestFingerprint.forRefundGoods(orderNumber, amount);
+
+        Optional<EscrowIdempotencyRecord> seen =
+            idempotencyRepository.find(EscrowOperation.REFUND_GOODS, key);
+        if (seen.isPresent()) {
+            return inOrderTransaction(orderNumber, () -> replaySettled(seen.get(), fingerprint));
+        }
+
+        try {
+            return inOrderTransaction(orderNumber,
+                () -> applyRefundGoods(orderNumber, amount, reason, key, source, fingerprint)
+            );
+        } catch (DuplicateIdempotencyKeyException duplicateKey) {
+            return inOrderTransaction(orderNumber, () -> replaySettled(
+                idempotencyRepository.find(EscrowOperation.REFUND_GOODS, key)
+                    .orElseThrow(() -> duplicateKey),
+                fingerprint
+            ));
+        }
     }
 
-    public int processAutoReleaseJob() {
-        List<EscrowHold> pendingHolds = escrowRepository.findPendingAutoReleaseHolds();
-        if (pendingHolds.isEmpty()) {
-            return 0;
-        }
-        LOG.info("auto-releasing {} escrow hold(s) whose release time has passed", pendingHolds.size());
+    private EscrowOutcome applyRefundGoods(
+        String orderNumber, BigDecimal amount, String reason, String key, IdempotencyKeySource source,
+        String fingerprint
+    ) {
+        EscrowIdempotencyRecord record = idempotencyRepository.save(EscrowIdempotencyRecord.opening(
+            EscrowOperation.REFUND_GOODS, key, source, orderNumber, fingerprint, trimDetail(reason)
+        ));
 
-        int released = 0;
-        for (EscrowHold hold : pendingHolds) {
-            try {
-                releaseEscrow(hold.orderNumber());
-                released++;
-            } catch (RuntimeException failure) {
-                LOG.error("auto-release of escrow for order {} failed and the money stays held: {}",
-                    hold.orderNumber(), failure.getMessage()
-                );
-            }
-        }
-        return released;
+        EscrowHold hold = escrowRepository.findByOrderNumberForUpdate(orderNumber)
+            .orElseThrow(() -> new EscrowNotFoundException(
+                "Escrow hold not found for order: " + orderNumber
+            ));
+        requireStillHeld(hold, "refunded for returned goods");
+        EscrowHold refunded = hold.refundGoods(amount);
+
+        lockWalletOwners(hold.customerPrincipalId(), hold.merchantPrincipalId());
+
+        MerchantWallet merchantWallet = merchantWalletRepository
+            .findByMerchantPrincipalIdForUpdate(hold.merchantPrincipalId())
+            .orElseGet(() -> MerchantWallet.createInitial(hold.merchantPrincipalId()));
+        merchantWalletRepository.save(merchantWallet.cancelPendingEscrow(amount));
+
+        CustomerWallet customerWallet = customerWalletRepository
+            .findByCustomerPrincipalIdForUpdate(hold.customerPrincipalId())
+            .orElseGet(() -> CustomerWallet.createInitial(hold.customerPrincipalId()));
+        customerWalletRepository.save(customerWallet.topUp(amount));
+
+        EscrowHold saved = escrowRepository.save(refunded);
+        recordLedgerEntryAt(goodsRefundReference(refunded),
+            PaymentTransaction.TransactionType.REFUND, hold.customerPrincipalId(), amount);
+
+        return new EscrowOutcome(link(record, saved), false);
+    }
+
+    public EscrowHold findByOrderNumber(String orderNumber) {
+        return escrowRepository.findByOrderNumber(orderNumber).orElse(null);
     }
 
     private EscrowOutcome applyCreateHold(
@@ -412,7 +448,10 @@ public class EscrowService {
         MerchantWallet merchantWallet = merchantWalletRepository
             .findByMerchantPrincipalIdForUpdate(hold.merchantPrincipalId())
             .orElseGet(() -> MerchantWallet.createInitial(hold.merchantPrincipalId()));
-        merchantWalletRepository.save(merchantWallet.releaseEscrowToAvailable(hold.merchantAmount()));
+        BigDecimal outstanding = hold.merchantAmountOutstanding();
+        if (outstanding.signum() > 0) {
+            merchantWalletRepository.save(merchantWallet.releaseEscrowToAvailable(outstanding));
+        }
 
         if (hold.shippingFeeSettled()) {
             LOG.debug("escrow release for order {}: shipping fee already settled to {}",
@@ -433,8 +472,10 @@ public class EscrowService {
         }
 
         EscrowHold released = escrowRepository.save(hold.markAsReleased());
-        recordLedgerEntry(PaymentTransaction.TransactionType.ESCROW_RELEASE,
-            orderNumber, hold.merchantPrincipalId(), hold.merchantAmount());
+        if (outstanding.signum() > 0) {
+            recordLedgerEntry(PaymentTransaction.TransactionType.ESCROW_RELEASE,
+                orderNumber, hold.merchantPrincipalId(), outstanding);
+        }
 
         return new EscrowOutcome(link(record, released), false);
     }
@@ -496,12 +537,13 @@ public class EscrowService {
         CustomerWallet customerWallet = customerWalletRepository
             .findByCustomerPrincipalIdForUpdate(hold.customerPrincipalId())
             .orElseGet(() -> CustomerWallet.createInitial(hold.customerPrincipalId()));
-        customerWalletRepository.save(customerWallet.topUp(hold.totalOrderAmount()));
+        BigDecimal stillHeld = hold.totalOrderAmount().subtract(hold.goodsRefundedAmount());
+        customerWalletRepository.save(customerWallet.topUp(stillHeld));
 
         MerchantWallet merchantWallet = merchantWalletRepository
             .findByMerchantPrincipalIdForUpdate(hold.merchantPrincipalId())
             .orElseGet(() -> MerchantWallet.createInitial(hold.merchantPrincipalId()));
-        merchantWalletRepository.save(merchantWallet.cancelPendingEscrow(hold.merchantAmount()));
+        merchantWalletRepository.save(merchantWallet.cancelPendingEscrow(hold.merchantAmountOutstanding()));
 
         if (hasDriver(hold.driverPrincipalId())) {
             DriverWallet driverWallet = driverWalletRepository
@@ -516,7 +558,7 @@ public class EscrowService {
 
         EscrowHold refunded = escrowRepository.save(hold.markAsRefunded());
         recordLedgerEntry(PaymentTransaction.TransactionType.REFUND,
-            hold.orderNumber(), hold.customerPrincipalId(), hold.totalOrderAmount());
+            hold.orderNumber(), hold.customerPrincipalId(), stillHeld);
 
         return new EscrowOutcome(link(record, refunded), false);
     }
@@ -548,9 +590,15 @@ public class EscrowService {
     private void recordLedgerEntry(
         PaymentTransaction.TransactionType type, String orderNumber, String principalId, BigDecimal amount
     ) {
+        recordLedgerEntryAt(ledgerReference(type, orderNumber), type, principalId, amount);
+    }
+
+    private void recordLedgerEntryAt(
+        String reference, PaymentTransaction.TransactionType type, String principalId, BigDecimal amount
+    ) {
         paymentTransactionRepository.save(new PaymentTransaction(
             null,
-            ledgerReference(type, orderNumber),
+            reference,
             null,
             principalId,
             type,
@@ -561,6 +609,10 @@ public class EscrowService {
             Instant.now(),
             null
         ));
+    }
+
+    private static String goodsRefundReference(EscrowHold refunded) {
+        return "escrow:goods:" + refunded.orderNumber() + ":" + refunded.goodsRefundedAmount().toPlainString();
     }
 
     private static String ledgerReference(

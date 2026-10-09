@@ -37,9 +37,6 @@ public class EscrowJpaEntity {
     @Column(name = "status", nullable = false, length = 32)
     private EscrowHold.EscrowStatus status;
 
-    @Column(name = "auto_release_at", nullable = false)
-    private Instant autoReleaseAt;
-
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -49,9 +46,12 @@ public class EscrowJpaEntity {
     @Column(name = "shipping_fee_settled_at")
     private Instant shippingFeeSettledAt;
 
+    @Column(name = "goods_refunded_amount", nullable = false, precision = 12, scale = 2)
+    private BigDecimal goodsRefundedAmount;
+
     public EscrowJpaEntity() {}
 
-    public EscrowJpaEntity(Long id, String orderNumber, String customerPrincipalId, String merchantPrincipalId, String driverPrincipalId, BigDecimal totalOrderAmount, BigDecimal merchantAmount, BigDecimal shippingFeeAmount, EscrowHold.EscrowStatus status, Instant autoReleaseAt, Instant createdAt, Instant releasedAt, Instant shippingFeeSettledAt) {
+    public EscrowJpaEntity(Long id, String orderNumber, String customerPrincipalId, String merchantPrincipalId, String driverPrincipalId, BigDecimal totalOrderAmount, BigDecimal merchantAmount, BigDecimal shippingFeeAmount, EscrowHold.EscrowStatus status, Instant createdAt, Instant releasedAt, Instant shippingFeeSettledAt, BigDecimal goodsRefundedAmount) {
         this.id = id;
         this.orderNumber = orderNumber;
         this.customerPrincipalId = customerPrincipalId;
@@ -61,10 +61,10 @@ public class EscrowJpaEntity {
         this.merchantAmount = merchantAmount;
         this.shippingFeeAmount = shippingFeeAmount;
         this.status = status;
-        this.autoReleaseAt = autoReleaseAt;
         this.createdAt = createdAt;
         this.releasedAt = releasedAt;
         this.shippingFeeSettledAt = shippingFeeSettledAt;
+        this.goodsRefundedAmount = goodsRefundedAmount;
     }
 
     public Long getId() { return id; }
@@ -76,8 +76,8 @@ public class EscrowJpaEntity {
     public BigDecimal getMerchantAmount() { return merchantAmount; }
     public BigDecimal getShippingFeeAmount() { return shippingFeeAmount; }
     public EscrowHold.EscrowStatus getStatus() { return status; }
-    public Instant getAutoReleaseAt() { return autoReleaseAt; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getReleasedAt() { return releasedAt; }
     public Instant getShippingFeeSettledAt() { return shippingFeeSettledAt; }
+    public BigDecimal getGoodsRefundedAmount() { return goodsRefundedAmount; }
 }

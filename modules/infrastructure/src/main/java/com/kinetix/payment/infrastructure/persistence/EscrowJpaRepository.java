@@ -16,7 +16,4 @@ public interface EscrowJpaRepository extends JpaRepository<EscrowJpaEntity, Long
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT e FROM EscrowJpaEntity e WHERE e.orderNumber = :orderNumber")
     Optional<EscrowJpaEntity> findByOrderNumberForUpdate(@Param("orderNumber") String orderNumber);
-
-    @Query("SELECT e FROM EscrowJpaEntity e WHERE e.status = :status AND e.autoReleaseAt <= :now")
-    List<EscrowJpaEntity> findPendingAutoReleaseHolds(EscrowHold.EscrowStatus status, Instant now);
 }

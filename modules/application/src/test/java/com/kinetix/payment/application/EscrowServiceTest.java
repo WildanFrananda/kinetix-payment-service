@@ -72,6 +72,12 @@ class EscrowServiceTest {
         when(idempotencyRepository.save(any())).thenAnswer(call -> call.getArgument(0));
         when(suspenseWalletRepository.save(any())).thenAnswer(call -> call.getArgument(0));
         when(suspenseWalletRepository.findByPurposeForUpdate(any())).thenReturn(Optional.empty());
+        when(merchantWalletRepository.findByMerchantPrincipalIdForUpdate(MERCHANT)).thenReturn(
+            Optional.of(MerchantWallet.createInitial(MERCHANT).addPendingEscrow(MERCHANT_AMOUNT))
+        );
+        when(driverWalletRepository.findByDriverPrincipalIdForUpdate(DRIVER)).thenReturn(
+            Optional.of(DriverWallet.createInitial(DRIVER).addPendingEscrow(SHIPPING))
+        );
 
         escrowService = new EscrowService(
             escrowRepository,
@@ -401,6 +407,7 @@ class EscrowServiceTest {
     @Test
     void everyRupiahTakenFromTheCustomerIsCreditedSomewhere() {
         givenCustomerWallet(new BigDecimal("200000.00"));
+        when(merchantWalletRepository.findByMerchantPrincipalIdForUpdate(MERCHANT)).thenReturn(Optional.empty());
 
         escrowService.createEscrowHold(driverlessCommand());
 
@@ -571,7 +578,7 @@ class EscrowServiceTest {
     }
 
     @Test
-    void theFortyEightHourReleaseLeavesAnAlreadySettledFeeAlone() {
+    void aReleaseLeavesAnAlreadySettledFeeAlone() {
         givenHold(EscrowHold.EscrowStatus.HELD, DRIVER, Instant.now().minusSeconds(60));
 
         escrowService.releaseEscrow(ORDER);
@@ -594,7 +601,7 @@ class EscrowServiceTest {
     private void givenHold(EscrowHold.EscrowStatus status, String driver, Instant settledAt) {
         EscrowHold hold = new EscrowHold(
             42L, ORDER, CUSTOMER, MERCHANT, driver, TOTAL, MERCHANT_AMOUNT, SHIPPING,
-            status, Instant.now().plusSeconds(3600), Instant.now(), null, settledAt
+            status, Instant.now(), null, settledAt, BigDecimal.ZERO
         );
         when(escrowRepository.findByOrderNumberForUpdate(ORDER)).thenReturn(Optional.of(hold));
         when(escrowRepository.findByOrderNumber(ORDER)).thenReturn(Optional.of(hold));
@@ -624,7 +631,7 @@ class EscrowServiceTest {
     private void givenDriverlessHold(EscrowHold.EscrowStatus status) {
         EscrowHold hold = new EscrowHold(
             42L, ORDER, CUSTOMER, MERCHANT, null, TOTAL, MERCHANT_AMOUNT, SHIPPING,
-            status, Instant.now().plusSeconds(3600), Instant.now(), null, null
+            status, Instant.now(), null, null, BigDecimal.ZERO
         );
         when(escrowRepository.findByOrderNumberForUpdate(ORDER)).thenReturn(Optional.of(hold));
         when(escrowRepository.findByOrderNumber(ORDER)).thenReturn(Optional.of(hold));
@@ -658,7 +665,7 @@ class EscrowServiceTest {
     private void givenExistingHold(EscrowHold.EscrowStatus status) {
         EscrowHold hold = new EscrowHold(
             42L, ORDER, CUSTOMER, MERCHANT, DRIVER, TOTAL, MERCHANT_AMOUNT, SHIPPING,
-            status, Instant.now().plusSeconds(3600), Instant.now(), null, null
+            status, Instant.now(), null, null, BigDecimal.ZERO
         );
         when(escrowRepository.findByOrderNumberForUpdate(ORDER)).thenReturn(Optional.of(hold));
         when(escrowRepository.findByOrderNumber(ORDER)).thenReturn(Optional.of(hold));
@@ -676,61 +683,12 @@ class EscrowServiceTest {
         );
     }
 
-    @Test
-    void theAutoReleaseSweepReleasesEveryHoldThatIsDue() {
-        String other = "ORD-2";
-        when(escrowRepository.findPendingAutoReleaseHolds())
-            .thenReturn(List.of(dueHold(ORDER), dueHold(other)));
-        givenReleasableHold(ORDER);
-        givenReleasableHold(other);
-
-        assertEquals(2, escrowService.processAutoReleaseJob());
-
-        verify(merchantWalletRepository, times(2)).save(any());
-    }
-
-    @Test
-    void oneHoldThatCannotBeReleasedDoesNotStopThePayoutsBehindIt() {
-        String broken = "ORD-BROKEN";
-        when(escrowRepository.findPendingAutoReleaseHolds())
-            .thenReturn(List.of(dueHold(broken), dueHold(ORDER)));
-        when(escrowRepository.findByOrderNumberForUpdate(broken)).thenReturn(Optional.empty());
-        when(escrowRepository.findByOrderNumber(broken)).thenReturn(Optional.empty());
-        givenReleasableHold(ORDER);
-
-        assertEquals(1, escrowService.processAutoReleaseJob());
-
-        verify(merchantWalletRepository, times(1)).save(any());
-    }
-
-    @Test
-    void aSweepWithNothingDueTouchesNoWallet() {
-        when(escrowRepository.findPendingAutoReleaseHolds()).thenReturn(List.of());
-
-        assertEquals(0, escrowService.processAutoReleaseJob());
-
-        verifyNoInteractions(merchantWalletRepository, driverWalletRepository, advisoryLock);
-    }
-
-    private EscrowHold dueHold(String orderNumber) {
-        return new EscrowHold(
-            42L, orderNumber, CUSTOMER, MERCHANT, DRIVER, TOTAL, MERCHANT_AMOUNT, SHIPPING,
-            EscrowHold.EscrowStatus.HELD, Instant.now().minusSeconds(60), Instant.now(), null, null
-        );
-    }
-
-    private void givenReleasableHold(String orderNumber) {
-        EscrowHold hold = dueHold(orderNumber);
-        when(escrowRepository.findByOrderNumberForUpdate(orderNumber)).thenReturn(Optional.of(hold));
-        when(escrowRepository.findByOrderNumber(orderNumber)).thenReturn(Optional.of(hold));
-    }
-
     private static EscrowHold withId(EscrowHold hold, Long id) {
         return new EscrowHold(
             id, hold.orderNumber(), hold.customerPrincipalId(), hold.merchantPrincipalId(),
             hold.driverPrincipalId(), hold.totalOrderAmount(), hold.merchantAmount(),
-            hold.shippingFeeAmount(), hold.status(), hold.autoReleaseAt(), hold.createdAt(),
-            hold.releasedAt(), hold.shippingFeeSettledAt()
+            hold.shippingFeeAmount(), hold.status(), hold.createdAt(),
+            hold.releasedAt(), hold.shippingFeeSettledAt(), hold.goodsRefundedAmount()
         );
     }
 

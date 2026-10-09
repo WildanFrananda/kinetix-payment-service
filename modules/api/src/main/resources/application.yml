@@ -84,11 +84,8 @@ kinetix:
     # gateway expires them, and each one costs a status call. 100 per run drains a real backlog over
     # a few sweeps without turning one run into a long burst of gateway traffic.
     top-up-batch-size: ${RECONCILIATION_TOPUP_BATCH_SIZE:100}
-    escrow-interval: ${RECONCILIATION_ESCROW_INTERVAL:5m}
-    # Both sweeps wait out startup rather than running against a context that is still wiring itself,
-    # and they are offset from each other so two sets of wallet locks are not taken at the same moment.
+    # The sweep waits out startup rather than running against a context that is still wiring itself.
     top-up-initial-delay: ${RECONCILIATION_TOPUP_INITIAL_DELAY:60s}
-    escrow-initial-delay: ${RECONCILIATION_ESCROW_INITIAL_DELAY:90s}
 
 grpc:
   server:

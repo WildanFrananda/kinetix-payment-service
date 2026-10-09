@@ -13,10 +13,10 @@ public record EscrowHold(
     BigDecimal merchantAmount,
     BigDecimal shippingFeeAmount,
     EscrowStatus status,
-    Instant autoReleaseAt,
     Instant createdAt,
     Instant releasedAt,
-    Instant shippingFeeSettledAt
+    Instant shippingFeeSettledAt,
+    BigDecimal goodsRefundedAmount
 ) {
     public EscrowHold {
         if (customerPrincipalId == null || customerPrincipalId.isBlank()) {
@@ -24,6 +24,15 @@ public record EscrowHold(
         }
         if (merchantPrincipalId == null || merchantPrincipalId.isBlank()) {
             throw new IllegalArgumentException("A merchant principal id is required");
+        }
+        if (goodsRefundedAmount == null || goodsRefundedAmount.signum() < 0) {
+            throw new IllegalArgumentException("The goods refunded from a hold cannot be negative or missing");
+        }
+        if (merchantAmount != null && goodsRefundedAmount.compareTo(merchantAmount) > 0) {
+            throw new IllegalArgumentException(
+                "order " + orderNumber + " cannot have refunded " + goodsRefundedAmount
+                    + " of goods when the merchant's share was " + merchantAmount
+            );
         }
     }
 
@@ -61,15 +70,51 @@ public record EscrowHold(
             merchantAmount,
             shippingFeeAmount,
             EscrowStatus.HELD,
-            Instant.now().plusSeconds(48 * 3600),
             Instant.now(),
             null,
-            null
+            null,
+            BigDecimal.ZERO
         );
     }
 
     public boolean shippingFeeSettled() {
         return shippingFeeSettledAt != null;
+    }
+
+    public BigDecimal merchantAmountOutstanding() {
+        return merchantAmount.subtract(goodsRefundedAmount);
+    }
+
+    public EscrowHold refundGoods(BigDecimal amount) {
+        if (status != EscrowStatus.HELD) {
+            throw new IllegalStateException(
+                "escrow for order " + orderNumber + " is " + status + "; goods are refunded only while it is held"
+            );
+        }
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("a goods refund must be a positive amount");
+        }
+        if (amount.compareTo(merchantAmountOutstanding()) > 0) {
+            throw new IllegalArgumentException(
+                "order " + orderNumber + " still holds " + merchantAmountOutstanding()
+                    + " for the merchant, which cannot cover a goods refund of " + amount
+            );
+        }
+        return new EscrowHold(
+            id,
+            orderNumber,
+            customerPrincipalId,
+            merchantPrincipalId,
+            driverPrincipalId,
+            totalOrderAmount,
+            merchantAmount,
+            shippingFeeAmount,
+            status,
+            createdAt,
+            releasedAt,
+            shippingFeeSettledAt,
+            goodsRefundedAmount.add(amount)
+        );
     }
 
     public EscrowHold settleShippingFeeTo(String settledDriverPrincipalId) {
@@ -94,10 +139,10 @@ public record EscrowHold(
             merchantAmount,
             shippingFeeAmount,
             status,
-            autoReleaseAt,
             createdAt,
             releasedAt,
-            Instant.now()
+            Instant.now(),
+            goodsRefundedAmount
         );
     }
 
@@ -112,10 +157,10 @@ public record EscrowHold(
             merchantAmount,
             shippingFeeAmount,
             EscrowStatus.REFUNDED,
-            autoReleaseAt,
             createdAt,
             Instant.now(),
-            shippingFeeSettledAt
+            shippingFeeSettledAt,
+            goodsRefundedAmount
         );
     }
 
@@ -130,10 +175,10 @@ public record EscrowHold(
             merchantAmount,
             shippingFeeAmount,
             EscrowStatus.RELEASED,
-            autoReleaseAt,
             createdAt,
             Instant.now(),
-            shippingFeeSettledAt
+            shippingFeeSettledAt,
+            goodsRefundedAmount
         );
     }
 }
