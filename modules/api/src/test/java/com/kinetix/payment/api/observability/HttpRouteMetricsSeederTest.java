@@ -3,7 +3,6 @@ package com.kinetix.payment.api.observability;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.kinetix.payment.api.controller.EscrowController;
 import com.kinetix.payment.api.controller.WalletController;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import java.time.Duration;
@@ -72,7 +71,7 @@ class HttpRouteMetricsSeederTest {
     @Test
     void aRouteDeclaringANonOkStatusIsSeededWithThatStatus() {
         String exposition =
-            seed(WalletController.class, EscrowController.class);
+            seed(WalletController.class);
 
         for (String created : new String[] {
             "kinetix_http_requests_total{method=\"POST\","
