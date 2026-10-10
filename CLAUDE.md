@@ -41,3 +41,7 @@ Boot 3.5's last release carries Spring Framework 6.2.19, which has two critical 
   open-source licence; 4.33.0 is Apache-2.0 and runs under Boot 4 (the migrate profile and the
   changelog diff were both run). The diff uses `liquibase-hibernate7` 5.0.4, which is Apache-2.0 and
   works with core 4.33.0. Moving to Liquibase 5 is a licence decision for the user, not an upgrade.
+
+`modules/api/build.gradle` also pins Tomcat 11.0.26 and Jackson 3.1.7 over Boot 4.1.1's 11.0.24 and 3.1.5,
+which carried three critical and five high CVEs on 2026-10-10. Drop each pin once a Boot release manages
+that version or later; leaving one behind makes this service lag every later fix.
