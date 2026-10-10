@@ -10,6 +10,12 @@ arrived, whether the return window has closed and whether a return is open; paym
 Until 2026-10-09 payment released every hold 48 hours after it was created, delivered or not, and
 also exposed an HTTP release endpoint. Both are gone, and so is the `auto_release_at` column.
 
+The same holds for the courier's fee. `SettleShippingFee` comes only from order, after matching reports the
+delivery, and names the courier who made it. An admin HTTP endpoint that paid the fee to whichever
+principal it was given was removed on 2026-10-10: a settlement cannot be re-pointed, so paying the wrong
+person first left the real courier unpaid, and settling before delivery made a cancelled order's refund
+impossible. A settlement that does not go through is retried by order, not overridden here.
+
 ## Returned goods
 
 `RefundGoods` moves part of the merchant's share back to the buyer while the hold is still `HELD`:
