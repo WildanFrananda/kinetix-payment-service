@@ -13,11 +13,13 @@ spring:
     timeout-per-shutdown-phase: 15s
   autoconfigure:
     exclude:
-      # net.devh registers its own gRPC meters the moment a MeterRegistry bean exists, under
-      # grpc.server.* names, plus the A66 stream tracers. Two vocabularies for one thing is the
-      # exact failure the metric contract exists to prevent, so calls are counted in
-      # GrpcServerMetricsInterceptor and nowhere else.
-      - net.devh.boot.grpc.server.autoconfigure.GrpcServerMetricAutoConfiguration
+      # Observations would register grpc.server.* meters beside the ones the metric contract names.
+      # Calls are counted in GrpcServerMetricsInterceptor and nowhere else.
+      - org.springframework.boot.grpc.server.autoconfigure.GrpcServerObservationAutoConfiguration
+      # With a JwtDecoder present these demand an identity token on every gRPC call. gRPC callers are
+      # services, admitted by mTLS and PeerAuthorizationInterceptor; tokens are for people, over HTTP.
+      - org.springframework.boot.grpc.server.autoconfigure.security.GrpcServerSecurityAutoConfiguration
+      - org.springframework.boot.grpc.server.autoconfigure.security.GrpcServerOAuth2ResourceServerAutoConfiguration
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -29,9 +31,6 @@ spring:
     hibernate:
       ddl-auto: validate
     show-sql: false
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
 
 midtrans:
   # Kinetix stays on Midtrans sandbox even in production. Moving environments is this URL plus
@@ -87,7 +86,7 @@ kinetix:
     # The sweep waits out startup rather than running against a context that is still wiring itself.
     top-up-initial-delay: ${RECONCILIATION_TOPUP_INITIAL_DELAY:60s}
 
-grpc:
+spring.grpc:
   server:
     # No default. compose declares GRPC_PORT for this service, and a fallback here would let the
     # topology and the process bind different ports with nothing reporting it.
@@ -95,13 +94,22 @@ grpc:
     # Server.shutdown() first: new calls are refused with UNAVAILABLE while calls already started
     # run to completion. Anything still running after this is ended by shutdownNow(), which fails
     # it with UNAVAILABLE rather than leaving the caller waiting on a socket that is about to go.
-    shutdown-grace-period: 10s
-    security:
+    shutdown:
+      grace-period: 10s
+    ssl:
       enabled: true
-      certificateChain: file:${KINETIX_PKI_DIR:/pki}/tls.crt
-      privateKey: file:${KINETIX_PKI_DIR:/pki}/tls.key
-      trustCertCollection: file:${KINETIX_PKI_DIR:/pki}/ca.pem
+      bundle: grpc-server
       # REQUIRE, not OPTIONAL. With OPTIONAL a caller that presents no certificate still reaches
       # the interceptor, and the whole guarantee rests on that one check rather than on the
       # handshake refusing first.
-      clientAuth: REQUIRE
+      client-auth: require
+
+spring.ssl:
+  bundle:
+    pem:
+      grpc-server:
+        keystore:
+          certificate: file:${KINETIX_PKI_DIR:/pki}/tls.crt
+          private-key: file:${KINETIX_PKI_DIR:/pki}/tls.key
+        truststore:
+          certificate: file:${KINETIX_PKI_DIR:/pki}/ca.pem

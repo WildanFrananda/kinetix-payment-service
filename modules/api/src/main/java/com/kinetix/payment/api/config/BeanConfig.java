@@ -1,6 +1,6 @@
 package com.kinetix.payment.api.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.kinetix.payment.application.EscrowService;
 import com.kinetix.payment.application.TopUpService;
 import com.kinetix.payment.application.WalletService;
@@ -11,8 +11,8 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class BeanConfig {
     @Bean
-    public ObjectMapper objectMapper() {
-        return new ObjectMapper();
+    public JsonMapper jsonMapper() {
+        return JsonMapper.builder().build();
     }
 
     @Bean

@@ -68,8 +68,8 @@ jobs:
       - name: Build the jar
         run: ./gradlew --no-daemon :modules:api:bootJar
 
-      # The migrate profile turns the gRPC server off with a negative port, so the process exits once
-      # Liquibase finishes — the same contract the migrator container has in compose.
+      # The migrate profile turns the gRPC server off (spring.grpc.server.enabled: false), so the process
+      # exits once Liquibase finishes — the same contract the migrator container has in compose.
       - name: Apply the changelog with the application's own migrate profile
         env:
           SPRING_PROFILES_ACTIVE: migrate

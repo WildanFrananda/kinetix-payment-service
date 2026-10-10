@@ -14,7 +14,6 @@ spring:
     hibernate:
       ddl-auto: none
 
-grpc:
-  server:
-    # net.devh treats a negative port as "do not start the server".
-    port: -1
+  grpc:
+    server:
+      enabled: false

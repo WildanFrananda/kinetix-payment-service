@@ -15,11 +15,13 @@ import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;
 import java.util.Collection;
 import java.util.concurrent.atomic.AtomicBoolean;
-import net.devh.boot.grpc.server.interceptor.GrpcGlobalServerInterceptor;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.grpc.server.GlobalServerInterceptor;
+import org.springframework.stereotype.Component;
 
-@GrpcGlobalServerInterceptor
+@Component
+@GlobalServerInterceptor
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class GrpcServerMetricsInterceptor implements ServerInterceptor {
     private static final String CALLS = "kinetix.grpc.server.calls";
