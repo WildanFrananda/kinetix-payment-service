@@ -1,7 +1,7 @@
 package com.kinetix.payment.infrastructure.gateway;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.kinetix.payment.domain.entity.PaymentTransaction.PaymentMethod;
 import com.kinetix.payment.domain.gateway.GatewayCharge;
 import com.kinetix.payment.domain.gateway.GatewayChargeOutcome;
@@ -104,9 +104,9 @@ class MidtransPaymentGatewayAdapterTest {
             lastAuthorization.get()
         );
         JsonNode sent = json.readTree(lastBody.get());
-        assertEquals("bank_transfer", sent.path("payment_type").asText());
-        assertEquals("bca", sent.path("bank_transfer").path("bank").asText());
-        assertEquals("TOPUP-1", sent.path("transaction_details").path("order_id").asText());
+        assertEquals("bank_transfer", sent.path("payment_type").asString());
+        assertEquals("bca", sent.path("bank_transfer").path("bank").asString());
+        assertEquals("TOPUP-1", sent.path("transaction_details").path("order_id").asString());
         assertTrue(sent.path("transaction_details").path("gross_amount").isIntegralNumber());
         assertEquals(50000L, sent.path("transaction_details").path("gross_amount").asLong());
         assertFalse(sent.has("customer_details"), "no customer detail is invented for the gateway");
@@ -124,7 +124,7 @@ class MidtransPaymentGatewayAdapterTest {
         );
 
         assertEquals("8562000087926752", charge.instructions().virtualAccountNumber());
-        assertEquals("permata", json.readTree(lastBody.get()).path("payment_type").asText());
+        assertEquals("permata", json.readTree(lastBody.get()).path("payment_type").asString());
     }
 
     @Test
@@ -142,8 +142,8 @@ class MidtransPaymentGatewayAdapterTest {
         assertEquals(GatewayChargeOutcome.ACCEPTED, charge.outcome());
         assertEquals("https://api.sandbox.midtrans.com/v2/qris/0d8178e1/qr-code", charge.instructions().qrCodeUrl());
         JsonNode sent = json.readTree(lastBody.get());
-        assertEquals("qris", sent.path("payment_type").asText());
-        assertEquals("gopay", sent.path("qris").path("acquirer").asText());
+        assertEquals("qris", sent.path("payment_type").asString());
+        assertEquals("gopay", sent.path("qris").path("acquirer").asString());
     }
 
     @Test

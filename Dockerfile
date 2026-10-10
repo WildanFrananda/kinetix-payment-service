@@ -1,4 +1,4 @@
-FROM gradle:8.12-jdk21@sha256:4c01ef2d5b57f88578b20891d8640dc799855731b977850940057c1ea37ba8a6 AS build
+FROM gradle:8.14.6-jdk21@sha256:7b2acae5b993b21d5d74aa8bae0e5de69494a7e0a8e84a17bc35a0c4b1d17db5 AS build
 
 WORKDIR /src
 

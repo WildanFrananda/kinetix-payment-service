@@ -1,8 +1,8 @@
 package com.kinetix.payment.infrastructure.gateway;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.kinetix.payment.domain.gateway.GatewayCharge;
 import com.kinetix.payment.domain.gateway.GatewayChargeOutcome;
 import com.kinetix.payment.domain.gateway.GatewayChargeRequest;
@@ -72,7 +72,7 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
         String body;
         try {
             body = objectMapper.writeValueAsString(chargeBody(request));
-        } catch (JsonProcessingException impossible) {
+        } catch (JacksonException impossible) {
             throw new IllegalStateException("a charge body built from plain values could not be written", impossible);
         }
 
@@ -308,7 +308,7 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
         try {
             JsonNode json = objectMapper.readTree(body);
             return json != null && json.isObject() ? json : null;
-        } catch (JsonProcessingException unreadable) {
+        } catch (JacksonException unreadable) {
             return null;
         }
     }
@@ -327,7 +327,7 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
 
     private static String text(JsonNode json, String field) {
         JsonNode value = json.get(field);
-        return value == null || value.isNull() ? null : value.asText();
+        return value == null || value.isNull() ? null : value.asString();
     }
 
     private static BigDecimal decimal(JsonNode json, String field) {

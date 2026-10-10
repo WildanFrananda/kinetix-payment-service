@@ -24,3 +24,20 @@ Moving escrow out of a wallet that does not hold it throws (`EscrowAmount.leavin
 clamping at zero. A clamp turned a bookkeeping error into money that silently stopped existing.
 A shipping fee settled to a driver after a driverless release is credited straight to available
 (`DriverWallet.creditAvailable`), because that driver never had it pending.
+
+## Spring Boot 4, and what was kept back
+
+Boot 3.5's last release carries Spring Framework 6.2.19, which has two critical CVEs fixed only in
+7.0.9, so payment is on Boot 4.1.1. Three things in that move are decisions rather than mechanics:
+
+- **gRPC is Boot's own** (`spring-boot-starter-grpc-server`), replacing net.devh, which was written for
+  Boot 3. mTLS is the `grpc-server` SSL bundle with `client-auth: require`.
+- **Boot's gRPC security auto-configuration is excluded.** With a `JwtDecoder` in the context it puts
+  an interceptor on every gRPC call that demands an identity token. gRPC callers are services, admitted
+  by mTLS and `PeerAuthorizationInterceptor`; tokens are for people, over HTTP. Leaving it on makes
+  every call from order `UNAUTHENTICATED` — that was run and seen. gRPC observations are excluded too:
+  they register `grpc.server.*` meters beside the names the metric contract gives payment.
+- **Liquibase stays on 4.33.0.** Liquibase 5, which Boot 4 manages, is licensed FSL-1.1-ALv2, not an
+  open-source licence; 4.33.0 is Apache-2.0 and runs under Boot 4 (the migrate profile and the
+  changelog diff were both run). The diff uses `liquibase-hibernate7` 5.0.4, which is Apache-2.0 and
+  works with core 4.33.0. Moving to Liquibase 5 is a licence decision for the user, not an upgrade.

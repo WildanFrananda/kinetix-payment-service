@@ -7,8 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.LoggingEvent;
 import ch.qos.logback.classic.spi.ThrowableProxy;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -38,11 +38,11 @@ class JsonLogFormatterTest {
         assertEquals(-1, line.substring(0, line.length() - 1).indexOf('\n'), line);
 
         JsonNode json = mapper.readTree(line);
-        assertEquals("escrow held", json.get("message").asText());
-        assertEquals("INFO", json.get("level").asText());
-        assertEquals("com.kinetix.payment.Probe", json.get("logger").asText());
-        assertEquals(REQUEST_ID, json.get("request_id").asText());
-        assertTrue(json.get("timestamp").asText().endsWith("Z"), line);
+        assertEquals("escrow held", json.get("message").asString());
+        assertEquals("INFO", json.get("level").asString());
+        assertEquals("com.kinetix.payment.Probe", json.get("logger").asString());
+        assertEquals(REQUEST_ID, json.get("request_id").asString());
+        assertTrue(json.get("timestamp").asString().endsWith("Z"), line);
     }
 
     @Test
@@ -51,7 +51,7 @@ class JsonLogFormatterTest {
 
         JsonNode json = mapper.readTree(line);
         assertTrue(json.has("request_id"), line);
-        assertNull(json.get("request_id").textValue(), line);
+        assertNull(json.get("request_id").stringValue(), line);
     }
 
     @Test
@@ -63,9 +63,9 @@ class JsonLogFormatterTest {
 
         assertEquals(-1, line.substring(0, line.length() - 1).indexOf('\n'), line);
         JsonNode json = mapper.readTree(line);
-        assertEquals("java.lang.IllegalStateException", json.get("error_type").asText());
-        assertEquals("no such hold", json.get("error_message").asText());
-        assertTrue(json.get("error_stack_trace").asText().contains("IllegalStateException"), line);
+        assertEquals("java.lang.IllegalStateException", json.get("error_type").asString());
+        assertEquals("no such hold", json.get("error_message").asString());
+        assertTrue(json.get("error_stack_trace").asString().contains("IllegalStateException"), line);
         assertTrue(line.contains(REQUEST_ID), line);
     }
 

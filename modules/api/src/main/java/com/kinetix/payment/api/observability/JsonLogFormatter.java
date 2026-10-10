@@ -3,8 +3,8 @@ package com.kinetix.payment.api.observability;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.classic.spi.IThrowableProxy;
 import ch.qos.logback.classic.spi.ThrowableProxyUtil;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -52,7 +52,7 @@ public class JsonLogFormatter implements StructuredLogFormatter<ILoggingEvent> {
     private String encode(Map<String, Object> line) {
         try {
             return mapper.writeValueAsString(line) + "\n";
-        } catch (JsonProcessingException unwritable) {
+        } catch (JacksonException unwritable) {
             return "{\"level\":\"ERROR\",\"logger\":\"" + JsonLogFormatter.class.getName()
                 + "\",\"message\":\"a log event could not be encoded as JSON\","
                 + "\"request_id\":null,\"error_type\":\"" + unwritable.getClass().getName()

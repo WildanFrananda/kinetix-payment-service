@@ -21,9 +21,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
-import net.devh.boot.grpc.server.interceptor.GrpcGlobalServerInterceptor;
+import org.springframework.grpc.server.GlobalServerInterceptor;
+import org.springframework.stereotype.Component;
 
-@GrpcGlobalServerInterceptor
+@Component
+@GlobalServerInterceptor
 public class PeerAuthorizationInterceptor implements ServerInterceptor {
     private static final Logger LOG = LoggerFactory.getLogger(PeerAuthorizationInterceptor.class);
 
