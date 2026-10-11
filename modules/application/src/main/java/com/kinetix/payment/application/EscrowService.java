@@ -206,6 +206,7 @@ public class EscrowService {
             );
             driverWalletRepository.save(driverWallet.creditAvailable(hold.shippingFeeAmount()));
         } else {
+            requireFeeKeptForCourier(orderNumber);
             suspenseWalletRepository.save(
                 unassignedDriverFees().debitAvailable(hold.shippingFeeAmount())
             );
@@ -213,10 +214,26 @@ public class EscrowService {
         }
 
         EscrowHold settled = escrowRepository.save(hold.settleShippingFeeTo(driverPrincipalId));
-        recordLedgerEntry(PaymentTransaction.TransactionType.SHIPPING_FEE,
-            orderNumber, driverPrincipalId, hold.shippingFeeAmount());
+        String reference = hold.status() == EscrowHold.EscrowStatus.RELEASED
+            ? keptFeePaidReference(orderNumber)
+            : ledgerReference(PaymentTransaction.TransactionType.SHIPPING_FEE, orderNumber);
+        recordLedgerEntryAt(reference,
+            PaymentTransaction.TransactionType.SHIPPING_FEE, driverPrincipalId, hold.shippingFeeAmount());
 
         return new EscrowOutcome(settled, false);
+    }
+
+    private void requireFeeKeptForCourier(String orderNumber) {
+        boolean kept = paymentTransactionRepository
+            .findByReferenceNumber(ledgerReference(PaymentTransaction.TransactionType.SHIPPING_FEE, orderNumber))
+            .filter(entry -> SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE.equals(entry.principalId()))
+            .isPresent();
+        if (!kept) {
+            throw new DomainException("order " + orderNumber + " was released without its shipping fee"
+                + " being kept for a courier, so nothing is held for it; paying it would spend the fee"
+                + " kept for another order"
+            );
+        }
     }
 
     public EscrowOutcome refundEscrow(String orderNumber, String reason, String idempotencyKey) {
@@ -609,6 +626,10 @@ public class EscrowService {
             Instant.now(),
             null
         ));
+    }
+
+    private static String keptFeePaidReference(String orderNumber) {
+        return ledgerReference(PaymentTransaction.TransactionType.SHIPPING_FEE, orderNumber) + ":paid";
     }
 
     private static String goodsRefundReference(EscrowHold refunded) {

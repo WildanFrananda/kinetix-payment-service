@@ -517,17 +517,47 @@ class EscrowServiceTest {
     void settlingAnAlreadyReleasedOrderDrainsTheSuspenseWallet() {
         givenHold(EscrowHold.EscrowStatus.RELEASED, null, null);
         givenSuspense(SHIPPING, BigDecimal.ZERO);
+        givenFeeKeptForCourier();
 
         escrowService.settleShippingFee(ORDER, DRIVER);
 
         assertEquals(0, savedSuspense().availableBalance().compareTo(BigDecimal.ZERO));
         assertEquals(0, savedDriverWallet().availableBalance().compareTo(SHIPPING));
+        verify(paymentTransactionRepository).save(argThat((PaymentTransaction t) ->
+            t.referenceNumber().equals("escrow:shipping:" + ORDER + ":paid")
+                && t.principalId().equals(DRIVER)
+                && t.amount().compareTo(SHIPPING) == 0
+        ));
+    }
+
+    @Test
+    void aReleaseThatKeptNoFeeForACourierPaysNoneOutOfSuspense() {
+        givenHold(EscrowHold.EscrowStatus.RELEASED, null, null);
+        givenSuspense(SHIPPING, BigDecimal.ZERO);
+
+        assertThrows(DomainException.class, () -> escrowService.settleShippingFee(ORDER, DRIVER));
+        verify(suspenseWalletRepository, never()).save(any());
+        verify(driverWalletRepository, never()).save(any());
+        verify(escrowRepository, never()).save(any());
+    }
+
+    @Test
+    void settlingBeforeTheReleasePaysUnderTheOrdersShippingReference() {
+        givenHold(EscrowHold.EscrowStatus.HELD, null, null);
+        givenSuspense(BigDecimal.ZERO, SHIPPING);
+
+        escrowService.settleShippingFee(ORDER, DRIVER);
+
+        verify(paymentTransactionRepository).save(argThat((PaymentTransaction t) ->
+            t.referenceNumber().equals("escrow:shipping:" + ORDER) && t.principalId().equals(DRIVER)
+        ));
     }
 
     @Test
     void suspenseCannotPayOutMoreThanItHolds() {
         givenHold(EscrowHold.EscrowStatus.RELEASED, null, null);
         givenSuspense(new BigDecimal("5000.00"), BigDecimal.ZERO);
+        givenFeeKeptForCourier();
 
         assertThrows(IllegalArgumentException.class,
             () -> escrowService.settleShippingFee(ORDER, DRIVER)
@@ -614,6 +644,15 @@ class EscrowServiceTest {
             9L, SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE, available, pending, "IDR",
             Instant.now(), Instant.now()
         )));
+    }
+
+    private void givenFeeKeptForCourier() {
+        when(paymentTransactionRepository.findByReferenceNumber("escrow:shipping:" + ORDER))
+            .thenReturn(Optional.of(new PaymentTransaction(
+                7L, "escrow:shipping:" + ORDER, null, SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE,
+                PaymentTransaction.TransactionType.SHIPPING_FEE, PaymentTransaction.PaymentMethod.INTERNAL_WALLET,
+                SHIPPING, PaymentTransaction.TransactionStatus.SUCCESS, null, Instant.now(), null
+            )));
     }
 
     private DriverWallet savedDriverWallet() {
