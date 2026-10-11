@@ -16,6 +16,15 @@ principal it was given was removed on 2026-10-10: a settlement cannot be re-poin
 person first left the real courier unpaid, and settling before delivery made a cancelled order's refund
 impossible. A settlement that does not go through is retried by order, not overridden here.
 
+A hold released before its courier was known keeps the fee in the `UNASSIGNED_DRIVER_SHIPPING_FEE`
+suspense wallet and writes `escrow:shipping:{order}` naming that wallet. When the courier's settlement
+arrives later, the payout from suspense is recorded as `escrow:shipping:{order}:paid`. Until 2026-10-10
+it reused `escrow:shipping:{order}`, which is unique, so every such settlement was refused and the fee
+stayed in suspense; order kept retrying it, and those retries go through once this is deployed. The
+suspense wallet pays out only for an order whose `escrow:shipping:{order}` row names it: it is one
+balance shared by every order, so paying a fee that was never kept there would spend another
+courier's. Holds released before 2026-09-16 kept nothing there and are refused.
+
 ## Returned goods
 
 `RefundGoods` moves part of the merchant's share back to the buyer while the hold is still `HELD`:
