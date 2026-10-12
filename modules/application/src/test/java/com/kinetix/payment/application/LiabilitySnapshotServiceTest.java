@@ -27,29 +27,36 @@ class LiabilitySnapshotServiceTest {
     private static final String DRIVER = "b7e2c05f-9a34-4c88-b1d6-0e7a3f52d914";
 
     @Test
-    @DisplayName("the snapshot is dated first, lists every balance in the order read, and closes with its own count and total")
+    @DisplayName(
+        "the snapshot is dated first, lists every balance in the order read, and closes with its own count and total"
+    )
     void snapshotIsDatedListedAndTotalled() {
         RecordingLiabilitySink sink = new RecordingLiabilitySink();
-        ScriptedLiabilitySnapshots port = port(List.of(
-            CustomerWallet.createInitial(CUSTOMER).topUp(new BigDecimal("500000.00")),
-            MerchantWallet.createInitial(MERCHANT).addPendingEscrow(new BigDecimal("130000.00")),
-            DriverWallet.createInitial(DRIVER).addPendingEscrow(new BigDecimal("20000.00")),
-            SuspenseWallet.createInitial(SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE)
-        ));
+        ScriptedLiabilitySnapshots port = port(
+            List.of(
+                CustomerWallet.createInitial(CUSTOMER).topUp(new BigDecimal("500000.00")),
+                MerchantWallet.createInitial(MERCHANT).addPendingEscrow(new BigDecimal("130000.00")),
+                DriverWallet.createInitial(DRIVER).addPendingEscrow(new BigDecimal("20000.00")),
+                SuspenseWallet.createInitial(SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE)
+            )
+        );
 
         LiabilitySnapshotTotals totals = new LiabilitySnapshotService(port).export("IDR", sink);
 
-        assertEquals(List.of(
-            "begin " + AS_OF + " IDR",
-            "account CUSTOMER_BALANCE",
-            "account MERCHANT_AVAILABLE",
-            "account MERCHANT_PENDING_ESCROW",
-            "account DRIVER_AVAILABLE",
-            "account DRIVER_PENDING_ESCROW",
-            "account SUSPENSE_AVAILABLE",
-            "account SUSPENSE_PENDING_ESCROW",
-            "end 7"
-        ), sink.events);
+        assertEquals(
+            List.of(
+                "begin " + AS_OF + " IDR",
+                "account CUSTOMER_BALANCE",
+                "account MERCHANT_AVAILABLE",
+                "account MERCHANT_PENDING_ESCROW",
+                "account DRIVER_AVAILABLE",
+                "account DRIVER_PENDING_ESCROW",
+                "account SUSPENSE_AVAILABLE",
+                "account SUSPENSE_PENDING_ESCROW",
+                "end 7"
+            ),
+            sink.events
+        );
         assertEquals(new LiabilitySnapshotTotals(AS_OF, "IDR", 7, new BigDecimal("650000.00")), totals);
         assertSame(totals, sink.totals);
         assertEquals(List.of("IDR"), port.currenciesRead);
@@ -72,7 +79,8 @@ class LiabilitySnapshotServiceTest {
         for (String currency : new String[] {null, "", "idr", "ID", "IDRX", " IDR"}) {
             ScriptedLiabilitySnapshots port = port(List.of());
 
-            assertThrows(IllegalArgumentException.class,
+            assertThrows(
+                IllegalArgumentException.class,
                 () -> new LiabilitySnapshotService(port).export(currency, new RecordingLiabilitySink())
             );
             assertTrue(port.currenciesRead.isEmpty(), "read for '" + currency + "'");
@@ -83,9 +91,18 @@ class LiabilitySnapshotServiceTest {
     @DisplayName("a balance in another currency means the source broke its promise, and the snapshot stops")
     void foreignCurrencyBalanceStopsTheSnapshot() {
         RecordingLiabilitySink sink = new RecordingLiabilitySink();
-        LiabilityHolder dollars = new CustomerWallet(1L, CUSTOMER, BigDecimal.TEN, BigDecimal.ZERO, "USD", AS_OF, AS_OF);
+        LiabilityHolder dollars = new CustomerWallet(
+            1L,
+            CUSTOMER,
+            BigDecimal.TEN,
+            BigDecimal.ZERO,
+            "USD",
+            AS_OF,
+            AS_OF
+        );
 
-        assertThrows(LiabilitySnapshotRefusedException.class,
+        assertThrows(
+            LiabilitySnapshotRefusedException.class,
             () -> new LiabilitySnapshotService(port(List.of(dollars))).export("IDR", sink)
         );
         assertNull(sink.totals);
@@ -97,7 +114,8 @@ class LiabilitySnapshotServiceTest {
         RecordingLiabilitySink sink = new RecordingLiabilitySink();
         LiabilityHolder held = new CustomerWallet(1L, CUSTOMER, BigDecimal.TEN, BigDecimal.ONE, "IDR", AS_OF, AS_OF);
 
-        assertThrows(LiabilitySnapshotRefusedException.class,
+        assertThrows(
+            LiabilitySnapshotRefusedException.class,
             () -> new LiabilitySnapshotService(port(List.of(held))).export("IDR", sink)
         );
         assertNull(sink.totals);
@@ -109,13 +127,17 @@ class LiabilitySnapshotServiceTest {
         RecordingLiabilitySink sink = new RecordingLiabilitySink();
         ScriptedLiabilitySnapshots undated = new ScriptedLiabilitySnapshots(null, List.of(), null);
         ScriptedLiabilitySnapshots readBeforeDated = new ScriptedLiabilitySnapshots(
-            null, List.of(CustomerWallet.createInitial(CUSTOMER)), null
+            null,
+            List.of(CustomerWallet.createInitial(CUSTOMER)),
+            null
         );
 
-        assertThrows(LiabilitySnapshotRefusedException.class,
+        assertThrows(
+            LiabilitySnapshotRefusedException.class,
             () -> new LiabilitySnapshotService(undated).export("IDR", sink)
         );
-        assertThrows(LiabilitySnapshotRefusedException.class,
+        assertThrows(
+            LiabilitySnapshotRefusedException.class,
             () -> new LiabilitySnapshotService(readBeforeDated).export("IDR", sink)
         );
         assertNull(sink.totals);
@@ -128,7 +150,8 @@ class LiabilitySnapshotServiceTest {
         ScriptedLiabilitySnapshots port = new ScriptedLiabilitySnapshots(AS_OF, List.of(), unreachable);
         RecordingLiabilitySink sink = new RecordingLiabilitySink();
 
-        UncheckedIOException thrown = assertThrows(UncheckedIOException.class,
+        UncheckedIOException thrown = assertThrows(
+            UncheckedIOException.class,
             () -> new LiabilitySnapshotService(port).export("IDR", sink)
         );
 

@@ -7,7 +7,9 @@ import org.springframework.security.oauth2.jwt.Jwt;
 
 public final class TokenUseValidator implements OAuth2TokenValidator<Jwt> {
     private static final OAuth2Error NOT_AN_ACCESS_TOKEN = new OAuth2Error(
-        "invalid_token", "the token is not an access token", null
+        "invalid_token",
+        "the token is not an access token",
+        null
     );
 
     @Override

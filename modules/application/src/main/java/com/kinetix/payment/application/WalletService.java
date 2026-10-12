@@ -35,9 +35,11 @@ public class WalletService {
             .orElseGet(() -> transactionRunner.inNewTransaction(() -> {
                 advisoryLock.lockWalletOwner(customerPrincipalId);
                 return customerWalletRepository.findByCustomerPrincipalIdForUpdate(customerPrincipalId)
-                    .orElseGet(() -> customerWalletRepository.save(
-                        CustomerWallet.createInitial(customerPrincipalId)
-                    ));
+                    .orElseGet(
+                        () -> customerWalletRepository.save(
+                            CustomerWallet.createInitial(customerPrincipalId)
+                        )
+                    );
             }));
     }
 
@@ -46,9 +48,11 @@ public class WalletService {
             .orElseGet(() -> transactionRunner.inNewTransaction(() -> {
                 advisoryLock.lockWalletOwner(merchantPrincipalId);
                 return merchantWalletRepository.findByMerchantPrincipalIdForUpdate(merchantPrincipalId)
-                    .orElseGet(() -> merchantWalletRepository.save(
-                        MerchantWallet.createInitial(merchantPrincipalId)
-                    ));
+                    .orElseGet(
+                        () -> merchantWalletRepository.save(
+                            MerchantWallet.createInitial(merchantPrincipalId)
+                        )
+                    );
             }));
     }
 
@@ -57,9 +61,11 @@ public class WalletService {
             .orElseGet(() -> transactionRunner.inNewTransaction(() -> {
                 advisoryLock.lockWalletOwner(driverPrincipalId);
                 return driverWalletRepository.findByDriverPrincipalIdForUpdate(driverPrincipalId)
-                    .orElseGet(() -> driverWalletRepository.save(
-                        DriverWallet.createInitial(driverPrincipalId)
-                    ));
+                    .orElseGet(
+                        () -> driverWalletRepository.save(
+                            DriverWallet.createInitial(driverPrincipalId)
+                        )
+                    );
             }));
     }
 }

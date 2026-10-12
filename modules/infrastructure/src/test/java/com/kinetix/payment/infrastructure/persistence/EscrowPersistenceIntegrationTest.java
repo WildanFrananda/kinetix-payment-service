@@ -68,8 +68,10 @@ class EscrowPersistenceIntegrationTest {
 
         transactionRunner.inNewTransaction(() -> idempotencyRepository.save(record(order, key)));
 
-        assertThrows(DuplicateIdempotencyKeyException.class, () ->
-            transactionRunner.inNewTransaction(() -> idempotencyRepository.save(record(order, key)))
+        assertThrows(
+            DuplicateIdempotencyKeyException.class,
+            () ->
+                transactionRunner.inNewTransaction(() -> idempotencyRepository.save(record(order, key)))
         );
     }
 
@@ -78,14 +80,20 @@ class EscrowPersistenceIntegrationTest {
         String key = "test:" + UUID.randomUUID();
         String order = order();
 
-        transactionRunner.inNewTransaction(() -> idempotencyRepository.save(
-            record(order, key, EscrowOperation.CREATE_HOLD))
+        transactionRunner.inNewTransaction(
+            () -> idempotencyRepository.save(
+                record(order, key, EscrowOperation.CREATE_HOLD)
+            )
         );
-        transactionRunner.inNewTransaction(() -> idempotencyRepository.save(
-            record(order, key, EscrowOperation.RELEASE))
+        transactionRunner.inNewTransaction(
+            () -> idempotencyRepository.save(
+                record(order, key, EscrowOperation.RELEASE)
+            )
         );
-        transactionRunner.inNewTransaction(() -> idempotencyRepository.save(
-            record(order, key, EscrowOperation.REFUND))
+        transactionRunner.inNewTransaction(
+            () -> idempotencyRepository.save(
+                record(order, key, EscrowOperation.REFUND)
+            )
         );
 
         assertTrue(idempotencyRepository.existsFor(EscrowOperation.REFUND, order));
@@ -97,8 +105,10 @@ class EscrowPersistenceIntegrationTest {
 
         transactionRunner.inNewTransaction(() -> escrowRepository.save(hold(order)));
 
-        assertThrows(DuplicateOrderNumberException.class, () ->
-            transactionRunner.inNewTransaction(() -> escrowRepository.save(hold(order)))
+        assertThrows(
+            DuplicateOrderNumberException.class,
+            () ->
+                transactionRunner.inNewTransaction(() -> escrowRepository.save(hold(order)))
         );
     }
 
@@ -108,8 +118,10 @@ class EscrowPersistenceIntegrationTest {
 
         transactionRunner.inNewTransaction(() -> paymentTransactionRepository.save(ledgerRow(order)));
 
-        assertThrows(DomainException.class, () ->
-            transactionRunner.inNewTransaction(() -> paymentTransactionRepository.save(ledgerRow(order)))
+        assertThrows(
+            DomainException.class,
+            () ->
+                transactionRunner.inNewTransaction(() -> paymentTransactionRepository.save(ledgerRow(order)))
         );
     }
 
@@ -148,13 +160,15 @@ class EscrowPersistenceIntegrationTest {
         EscrowHold saved = transactionRunner.inNewTransaction(() -> escrowRepository.save(hold(order)));
 
         CapturedStatements.forget();
-        EscrowHold locked = transactionRunner.inNewTransaction(() ->
-            escrowRepository.findByOrderNumberForUpdate(order).orElseThrow()
+        EscrowHold locked = transactionRunner.inNewTransaction(
+            () ->
+                escrowRepository.findByOrderNumberForUpdate(order).orElseThrow()
         );
 
         assertEquals(saved.id(), locked.id());
         assertEquals(0, TOTAL.compareTo(locked.totalOrderAmount()));
-        assertTrue(CapturedStatements.sawSelectOn("escrow_holds", "for no key update"),
+        assertTrue(
+            CapturedStatements.sawSelectOn("escrow_holds", "for no key update"),
             "no locking select on escrow_holds was emitted; statements were "
                 + CapturedStatements.selectsOn("escrow_holds")
         );
@@ -179,13 +193,16 @@ class EscrowPersistenceIntegrationTest {
             return null;
         });
 
-        assertTrue(CapturedStatements.sawSelectOn("customer_wallets", "for no key update"),
+        assertTrue(
+            CapturedStatements.sawSelectOn("customer_wallets", "for no key update"),
             "customer_wallets was read without a row lock: " + CapturedStatements.selectsOn("customer_wallets")
         );
-        assertTrue(CapturedStatements.sawSelectOn("merchant_wallets", "for no key update"),
+        assertTrue(
+            CapturedStatements.sawSelectOn("merchant_wallets", "for no key update"),
             "merchant_wallets was read without a row lock: " + CapturedStatements.selectsOn("merchant_wallets")
         );
-        assertTrue(CapturedStatements.sawSelectOn("driver_wallets", "for no key update"),
+        assertTrue(
+            CapturedStatements.sawSelectOn("driver_wallets", "for no key update"),
             "driver_wallets was read without a row lock: " + CapturedStatements.selectsOn("driver_wallets")
         );
     }
@@ -193,8 +210,9 @@ class EscrowPersistenceIntegrationTest {
     @Test
     void twoWritersCannotHoldOneCustomerWalletRowAtTheSameTime() throws Exception {
         String customer = principal();
-        transactionRunner.inNewTransaction(() ->
-            customerWalletRepository.save(CustomerWallet.createInitial(customer))
+        transactionRunner.inNewTransaction(
+            () ->
+                customerWalletRepository.save(CustomerWallet.createInitial(customer))
         );
 
         CountDownLatch held = new CountDownLatch(1);
@@ -204,10 +222,12 @@ class EscrowPersistenceIntegrationTest {
                 connection.setAutoCommit(false);
                 try (PreparedStatement statement = connection.prepareStatement(
                     "SELECT id FROM customer_wallets WHERE customer_principal_id = ? "
-                        + "FOR NO KEY UPDATE")) {
+                        + "FOR NO KEY UPDATE"
+                )) {
                     statement.setString(1, customer);
                     statement.execute();
                 }
+
                 held.countDown();
                 release.await(30, TimeUnit.SECONDS);
                 connection.rollback();
@@ -216,6 +236,7 @@ class EscrowPersistenceIntegrationTest {
                 throw new IllegalStateException("the holder could not take the row", error);
             }
         });
+
         holder.setDaemon(true);
         holder.start();
 
@@ -224,18 +245,21 @@ class EscrowPersistenceIntegrationTest {
             AtomicLong waited = new AtomicLong(-1);
             Thread waiter = new Thread(() -> {
                 long startedAt = System.nanoTime();
-                transactionRunner.inNewTransaction(() ->
-                    customerWalletRepository.findByCustomerPrincipalIdForUpdate(customer)
+                transactionRunner.inNewTransaction(
+                    () ->
+                        customerWalletRepository.findByCustomerPrincipalIdForUpdate(customer)
                 );
                 waited.set((System.nanoTime() - startedAt) / 1_000_000);
             });
+
             waiter.start();
 
             Thread.sleep(1_000);
             release.countDown();
             waiter.join(10_000);
 
-            assertTrue(waited.get() >= 600,
+            assertTrue(
+                waited.get() >= 600,
                 "the second writer read the wallet row after " + waited.get() + "ms while another "
                     + "transaction held it for 1000ms; the lock excluded nobody"
             );
@@ -250,8 +274,9 @@ class EscrowPersistenceIntegrationTest {
         String order = order();
         String key = "test:" + UUID.randomUUID();
 
-        EscrowIdempotencyRecord tombstone = transactionRunner.inNewTransaction(() ->
-            idempotencyRepository.save(record(order, key, EscrowOperation.REFUND))
+        EscrowIdempotencyRecord tombstone = transactionRunner.inNewTransaction(
+            () ->
+                idempotencyRepository.save(record(order, key, EscrowOperation.REFUND))
         );
 
         assertTrue(tombstone.isTombstone());
@@ -271,17 +296,29 @@ class EscrowPersistenceIntegrationTest {
     }
 
     private static EscrowIdempotencyRecord record(
-        String orderNumber, String key, EscrowOperation operation
+        String orderNumber,
+        String key,
+        EscrowOperation operation
     ) {
         return EscrowIdempotencyRecord.opening(
-            operation, key, IdempotencyKeySource.CALLER, orderNumber,
-            "0".repeat(64), null
+            operation,
+            key,
+            IdempotencyKeySource.CALLER,
+            orderNumber,
+            "0".repeat(64),
+            null
         );
     }
 
     private static EscrowHold hold(String orderNumber) {
         return EscrowHold.createNewHold(
-            orderNumber, CUSTOMER, MERCHANT, null, TOTAL, MERCHANT_AMOUNT, SHIPPING
+            orderNumber,
+            CUSTOMER,
+            MERCHANT,
+            null,
+            TOTAL,
+            MERCHANT_AMOUNT,
+            SHIPPING
         );
     }
 

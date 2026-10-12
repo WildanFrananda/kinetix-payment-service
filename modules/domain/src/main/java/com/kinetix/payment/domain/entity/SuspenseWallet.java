@@ -19,9 +19,11 @@ public record SuspenseWallet(
         if (purpose == null || purpose.isBlank()) {
             throw new IllegalArgumentException("A suspense purpose is required");
         }
+
         if (availableBalance.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("Available balance cannot be negative");
         }
+
         if (pendingEscrowBalance.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("Pending escrow balance cannot be negative");
         }
@@ -79,12 +81,14 @@ public record SuspenseWallet(
         if (amount == null || amount.signum() <= 0) {
             throw new IllegalArgumentException("A suspense payout must be a positive amount");
         }
+
         if (availableBalance.compareTo(amount) < 0) {
             throw new IllegalArgumentException(
                 "suspense wallet " + purpose + " holds " + availableBalance
                     + " and cannot pay out " + amount
             );
         }
+
         return new SuspenseWallet(
             id,
             purpose,

@@ -6,7 +6,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface EscrowIdempotencyJpaRepository extends JpaRepository<EscrowIdempotencyJpaEntity, Long> {
     Optional<EscrowIdempotencyJpaEntity> findByOperationAndIdempotencyKey(
-        EscrowOperation operation, String idempotencyKey
+        EscrowOperation operation,
+        String idempotencyKey
     );
 
     boolean existsByOperationAndOrderNumber(EscrowOperation operation, String orderNumber);

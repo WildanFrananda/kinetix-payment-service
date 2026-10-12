@@ -51,7 +51,21 @@ public class EscrowJpaEntity {
 
     public EscrowJpaEntity() {}
 
-    public EscrowJpaEntity(Long id, String orderNumber, String customerPrincipalId, String merchantPrincipalId, String driverPrincipalId, BigDecimal totalOrderAmount, BigDecimal merchantAmount, BigDecimal shippingFeeAmount, EscrowHold.EscrowStatus status, Instant createdAt, Instant releasedAt, Instant shippingFeeSettledAt, BigDecimal goodsRefundedAmount) {
+    public EscrowJpaEntity(
+        Long id,
+        String orderNumber,
+        String customerPrincipalId,
+        String merchantPrincipalId,
+        String driverPrincipalId,
+        BigDecimal totalOrderAmount,
+        BigDecimal merchantAmount,
+        BigDecimal shippingFeeAmount,
+        EscrowHold.EscrowStatus status,
+        Instant createdAt,
+        Instant releasedAt,
+        Instant shippingFeeSettledAt,
+        BigDecimal goodsRefundedAmount
+    ) {
         this.id = id;
         this.orderNumber = orderNumber;
         this.customerPrincipalId = customerPrincipalId;

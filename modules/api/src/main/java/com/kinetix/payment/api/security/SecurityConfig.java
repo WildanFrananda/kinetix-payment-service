@@ -29,15 +29,17 @@ public class SecurityConfig {
         return http
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(routes -> routes
-                .requestMatchers("/health", "/health/**").permitAll()
-                .requestMatchers("/metrics").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/v1/payment/gateway/midtrans/notifications").permitAll()
-                .anyRequest().authenticated()
+            .authorizeHttpRequests(
+                routes -> routes
+                    .requestMatchers("/health", "/health/**").permitAll()
+                    .requestMatchers("/metrics").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/v1/payment/gateway/midtrans/notifications").permitAll()
+                    .anyRequest().authenticated()
             )
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
-            .exceptionHandling(handling -> handling
-                .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
+            .exceptionHandling(
+                handling -> handling
+                    .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
             )
             .build();
     }
@@ -52,13 +54,16 @@ public class SecurityConfig {
             .jwsAlgorithm(SignatureAlgorithm.RS256)
             .build();
 
-        OAuth2TokenValidator<Jwt> validators = new DelegatingOAuth2TokenValidator<>(List.of(
-            JwtValidators.createDefaultWithIssuer(issuer),
-            new JwtClaimValidator<List<String>>(
-                "aud", aud -> aud != null && aud.contains(audience)
-            ),
-            new TokenUseValidator()
-        ));
+        OAuth2TokenValidator<Jwt> validators = new DelegatingOAuth2TokenValidator<>(
+            List.of(
+                JwtValidators.createDefaultWithIssuer(issuer),
+                new JwtClaimValidator<List<String>>(
+                    "aud",
+                    aud -> aud != null && aud.contains(audience)
+                ),
+                new TokenUseValidator()
+            )
+        );
         decoder.setJwtValidator(validators);
 
         return decoder;

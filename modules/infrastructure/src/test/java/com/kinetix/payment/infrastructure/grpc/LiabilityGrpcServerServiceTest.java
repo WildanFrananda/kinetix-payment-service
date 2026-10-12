@@ -52,9 +52,11 @@ class LiabilityGrpcServerServiceTest {
         assertEquals(AS_OF.getEpochSecond(), header.getAsOf().getSeconds());
         assertEquals(AS_OF.getNano(), header.getAsOf().getNanos());
         assertEquals("IDR", header.getCurrency());
-        assertEquals(List.of(500, 500, 201), call.sent.subList(1, 4).stream()
-            .map(part -> part.getAccounts().getAccountsCount())
-            .toList()
+        assertEquals(
+            List.of(500, 500, 201),
+            call.sent.subList(1, 4).stream()
+                .map(part -> part.getAccounts().getAccountsCount())
+                .toList()
         );
         Liability.LiabilitySnapshotTrailer trailer = call.sent.get(4).getTrailer();
         assertEquals(1201, trailer.getAccountCount());
@@ -68,11 +70,14 @@ class LiabilityGrpcServerServiceTest {
 
     @Test
     void balancesCrossTheWireInExactMinorUnitsUnderTheRightHolder() {
-        serve(List.of(
-            CustomerWallet.createInitial(CUSTOMER).topUp(new BigDecimal("150000.00")),
-            MerchantWallet.createInitial(MERCHANT).addPendingEscrow(new BigDecimal("90000000000000000.00")),
-            SuspenseWallet.createInitial(SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE)
-        ), "IDR");
+        serve(
+            List.of(
+                CustomerWallet.createInitial(CUSTOMER).topUp(new BigDecimal("150000.00")),
+                MerchantWallet.createInitial(MERCHANT).addPendingEscrow(new BigDecimal("90000000000000000.00")),
+                SuspenseWallet.createInitial(SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE)
+            ),
+            "IDR"
+        );
 
         assertNull(call.error);
         List<Liability.LiabilityAccount> accounts = call.sent.get(1).getAccounts().getAccountsList();
@@ -90,10 +95,13 @@ class LiabilityGrpcServerServiceTest {
 
     @Test
     void aTotalTooLargeForTheWireIsRefusedRatherThanWrapped() {
-        serve(List.of(
-            MerchantWallet.createInitial(MERCHANT).addPendingEscrow(new BigDecimal("92233720368547758.07")),
-            CustomerWallet.createInitial(CUSTOMER).topUp(new BigDecimal("0.01"))
-        ), "IDR");
+        serve(
+            List.of(
+                MerchantWallet.createInitial(MERCHANT).addPendingEscrow(new BigDecimal("92233720368547758.07")),
+                CustomerWallet.createInitial(CUSTOMER).topUp(new BigDecimal("0.01"))
+            ),
+            "IDR"
+        );
 
         assertFalse(call.completed);
         assertRefused(Status.Code.FAILED_PRECONDITION, "LIABILITY_SNAPSHOT_REFUSED");
@@ -118,7 +126,9 @@ class LiabilityGrpcServerServiceTest {
     @Test
     void anUnreadableLedgerIsUnavailableNotRefused() {
         ListedLiabilitySnapshots port = new ListedLiabilitySnapshots(
-            AS_OF, List.of(), new DataAccessResourceFailureException("connection refused")
+            AS_OF,
+            List.of(),
+            new DataAccessResourceFailureException("connection refused")
         );
 
         new LiabilityGrpcServerService(new LiabilitySnapshotService(port), Duration.ofSeconds(1))
@@ -142,7 +152,9 @@ class LiabilityGrpcServerServiceTest {
     void aCallerThatStopsReadingReleasesTheSnapshot() {
         call.neverReady = true;
         ListedLiabilitySnapshots port = new ListedLiabilitySnapshots(
-            AS_OF, List.of(CustomerWallet.createInitial(CUSTOMER), CustomerWallet.createInitial(MERCHANT)), null
+            AS_OF,
+            List.of(CustomerWallet.createInitial(CUSTOMER), CustomerWallet.createInitial(MERCHANT)),
+            null
         );
 
         new LiabilityGrpcServerService(new LiabilitySnapshotService(port), Duration.ofMillis(50))
@@ -158,13 +170,16 @@ class LiabilityGrpcServerServiceTest {
     void aCallerThatHungUpIsNotAnsweredAndTheReadStops() {
         call.neverReady = true;
         ListedLiabilitySnapshots port = new ListedLiabilitySnapshots(
-            AS_OF, List.of(CustomerWallet.createInitial(CUSTOMER)), null
+            AS_OF,
+            List.of(CustomerWallet.createInitial(CUSTOMER)),
+            null
         );
         Context.CancellableContext hungUp = Context.current().withCancellation();
         hungUp.cancel(null);
 
-        hungUp.run(() -> new LiabilityGrpcServerService(new LiabilitySnapshotService(port), Duration.ofSeconds(5))
-            .streamLiabilitySnapshot(request("IDR"), call)
+        hungUp.run(
+            () -> new LiabilityGrpcServerService(new LiabilitySnapshotService(port), Duration.ofSeconds(5))
+                .streamLiabilitySnapshot(request("IDR"), call)
         );
 
         assertTrue(call.sent.isEmpty());

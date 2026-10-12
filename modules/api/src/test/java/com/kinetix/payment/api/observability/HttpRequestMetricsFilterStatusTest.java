@@ -44,7 +44,8 @@ class HttpRequestMetricsFilterStatusTest {
         assertTrue(
             exposition.contains(
                 "kinetix_http_requests_total{method=\"GET\","
-                    + "route=\"/api/v1/probe/unhandled-failure\",status=\"500\"} 1.0"),
+                    + "route=\"/api/v1/probe/unhandled-failure\",status=\"500\"} 1.0"
+            ),
             "a failed request produced no 5xx series, so an alert on payment's error rate "
                 + "can never fire:\n" + exposition
         );
@@ -66,7 +67,8 @@ class HttpRequestMetricsFilterStatusTest {
         assertTrue(
             exposition.contains(
                 "kinetix_http_requests_total{method=\"GET\","
-                    + "route=\"/api/v1/probe/committed-failure\",status=\"202\"} 1.0"),
+                    + "route=\"/api/v1/probe/committed-failure\",status=\"202\"} 1.0"
+            ),
             "the container cannot rewrite a committed status, so neither may the counter:\n"
                 + exposition
         );
@@ -88,7 +90,8 @@ class HttpRequestMetricsFilterStatusTest {
         assertTrue(
             exposition.contains(
                 "kinetix_http_request_duration_seconds_count{method=\"GET\","
-                    + "route=\"/api/v1/probe/unhandled-failure\"} 1"),
+                    + "route=\"/api/v1/probe/unhandled-failure\"} 1"
+            ),
             "a failed request vanished from the latency histogram:\n" + exposition
         );
     }

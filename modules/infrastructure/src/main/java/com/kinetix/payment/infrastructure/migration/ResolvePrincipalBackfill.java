@@ -53,9 +53,11 @@ public class ResolvePrincipalBackfill implements CustomTaskChange {
                 if (pending.isEmpty()) {
                     continue;
                 }
+
                 if (channel == null) {
                     channel = openChannel();
                 }
+
                 int rows = 0;
                 for (Long legacyId : pending) {
                     String principalId = resolved.get(legacyId);
@@ -63,8 +65,10 @@ public class ResolvePrincipalBackfill implements CustomTaskChange {
                         principalId = resolve(channel, legacyId);
                         resolved.put(legacyId, principalId);
                     }
+
                     rows += apply(connection, column, legacyId, principalId);
                 }
+
                 filled.add(rows + " x " + column.table() + "." + column.principal());
             }
         } catch (CustomChangeException e) {
@@ -94,10 +98,11 @@ public class ResolvePrincipalBackfill implements CustomTaskChange {
 
         return NettyChannelBuilder.forTarget(target)
             .negotiationType(NegotiationType.TLS)
-            .sslContext(GrpcSslContexts.forClient()
-                .trustManager(new File(pki, "ca.pem"))
-                .keyManager(new File(pki, "tls.crt"), new File(pki, "tls.key"))
-                .build()
+            .sslContext(
+                GrpcSslContexts.forClient()
+                    .trustManager(new File(pki, "ca.pem"))
+                    .keyManager(new File(pki, "tls.crt"), new File(pki, "tls.key"))
+                    .build()
             )
             .build();
     }
@@ -106,13 +111,15 @@ public class ResolvePrincipalBackfill implements CustomTaskChange {
         Identity.ResolvePrincipalResponse response = IdentityServiceGrpc
             .newBlockingStub(channel)
             .withDeadlineAfter(15, TimeUnit.SECONDS)
-            .resolvePrincipal(Identity.ResolvePrincipalRequest.newBuilder()
-                .setServiceLocalId(Identity.ServiceLocalId.newBuilder()
-                    .setService("identity")
-                    .setLocalId(Long.toString(legacyId))
+            .resolvePrincipal(
+                Identity.ResolvePrincipalRequest.newBuilder()
+                    .setServiceLocalId(
+                        Identity.ServiceLocalId.newBuilder()
+                            .setService("identity")
+                            .setLocalId(Long.toString(legacyId))
+                            .build()
+                    )
                     .build()
-                )
-                .build()
             );
 
         if (!response.getFound() || response.getPrincipalId().isBlank()) {
@@ -121,6 +128,7 @@ public class ResolvePrincipalBackfill implements CustomTaskChange {
                     + "cannot be reached by anyone. Migration stopped with the old columns intact."
             );
         }
+
         return response.getPrincipalId();
     }
 
@@ -135,6 +143,7 @@ public class ResolvePrincipalBackfill implements CustomTaskChange {
                 ids.add(rows.getLong(1));
             }
         }
+
         return ids;
     }
 

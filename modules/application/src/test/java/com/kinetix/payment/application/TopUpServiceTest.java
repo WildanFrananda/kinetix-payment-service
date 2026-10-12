@@ -85,9 +85,12 @@ class TopUpServiceTest {
         service.requestTopUp(vaTopUp());
 
         InOrder order = inOrder(transactions, gateway);
-        order.verify(transactions).save(argThat((PaymentTransaction t) ->
-            t.status() == TransactionStatus.PENDING && t.externalTransactionId() == null
-        ));
+        order.verify(transactions).save(
+            argThat(
+                (PaymentTransaction t) ->
+                    t.status() == TransactionStatus.PENDING && t.externalTransactionId() == null
+            )
+        );
         order.verify(gateway).charge(any());
     }
 
@@ -120,7 +123,11 @@ class TopUpServiceTest {
     @Test
     void aRefusedChargeIsRecordedAsFailedAndReportedAsARefusal() {
         when(gateway.charge(any())).thenReturn(new GatewayCharge(
-            GatewayChargeOutcome.REFUSED, null, PaymentInstructions.none(), "{\"status_code\":\"400\"}", "validation"
+            GatewayChargeOutcome.REFUSED,
+            null,
+            PaymentInstructions.none(),
+            "{\"status_code\":\"400\"}",
+            "validation"
         ));
 
         assertThrows(GatewayRefusedException.class, () -> service.requestTopUp(vaTopUp()));
@@ -131,9 +138,15 @@ class TopUpServiceTest {
 
     @Test
     void aChargeWithNoDefiniteAnswerStaysPendingAndIsReportedAsUnavailableNotRefused() {
-        when(gateway.charge(any())).thenReturn(new GatewayCharge(
-            GatewayChargeOutcome.UNKNOWN, null, PaymentInstructions.none(), null, "timed out"
-        ));
+        when(gateway.charge(any())).thenReturn(
+            new GatewayCharge(
+                GatewayChargeOutcome.UNKNOWN,
+                null,
+                PaymentInstructions.none(),
+                null,
+                "timed out"
+            )
+        );
 
         GatewayUnavailableException unavailable =
             assertThrows(GatewayUnavailableException.class, () -> service.requestTopUp(vaTopUp()));
@@ -171,9 +184,11 @@ class TopUpServiceTest {
 
     @Test
     void aReplayOfAChargeThatNeverGotAnAnswerIsStillUnavailableRatherThanAFreshCharge() {
-        when(transactions.findByPrincipalIdAndIdempotencyKey(CUSTOMER, KEY)).thenReturn(Optional.of(
-            PaymentTransaction.pendingTopUp("TOPUP-first", CUSTOMER, KEY, PaymentMethod.MIDTRANS_VA, AMOUNT)
-        ));
+        when(transactions.findByPrincipalIdAndIdempotencyKey(CUSTOMER, KEY)).thenReturn(
+            Optional.of(
+                PaymentTransaction.pendingTopUp("TOPUP-first", CUSTOMER, KEY, PaymentMethod.MIDTRANS_VA, AMOUNT)
+            )
+        );
 
         assertThrows(GatewayUnavailableException.class, () -> service.requestTopUp(vaTopUp()));
 
@@ -195,9 +210,18 @@ class TopUpServiceTest {
 
     @Test
     void aFractionOfARupiahIsRefusedBeforeAnythingIsWritten() {
-        assertThrows(IllegalArgumentException.class, () -> service.requestTopUp(new TopUpCommand(
-            CUSTOMER, KEY, new BigDecimal("50000.50"), PaymentMethod.MIDTRANS_VA, VirtualAccountBank.BCA
-        )));
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> service.requestTopUp(
+                new TopUpCommand(
+                    CUSTOMER,
+                    KEY,
+                    new BigDecimal("50000.50"),
+                    PaymentMethod.MIDTRANS_VA,
+                    VirtualAccountBank.BCA
+                )
+            )
+        );
 
         verifyNoInteractions(gateway);
         verify(transactions, never()).save(any());
@@ -205,24 +229,36 @@ class TopUpServiceTest {
 
     @Test
     void aVirtualAccountNeedsABankQrisTakesNoneAndNothingElseIsATopUpMethod() {
-        assertThrows(IllegalArgumentException.class, () -> service.requestTopUp(
-            new TopUpCommand(CUSTOMER, KEY, AMOUNT, PaymentMethod.MIDTRANS_VA, null)
-        ));
-        assertThrows(IllegalArgumentException.class, () -> service.requestTopUp(
-            new TopUpCommand(CUSTOMER, KEY, AMOUNT, PaymentMethod.MIDTRANS_QRIS, VirtualAccountBank.BCA)
-        ));
-        assertThrows(IllegalArgumentException.class, () -> service.requestTopUp(
-            new TopUpCommand(CUSTOMER, KEY, AMOUNT, PaymentMethod.INTERNAL_WALLET, null)
-        ));
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> service.requestTopUp(
+                new TopUpCommand(CUSTOMER, KEY, AMOUNT, PaymentMethod.MIDTRANS_VA, null)
+            )
+        );
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> service.requestTopUp(
+                new TopUpCommand(CUSTOMER, KEY, AMOUNT, PaymentMethod.MIDTRANS_QRIS, VirtualAccountBank.BCA)
+            )
+        );
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> service.requestTopUp(
+                new TopUpCommand(CUSTOMER, KEY, AMOUNT, PaymentMethod.INTERNAL_WALLET, null)
+            )
+        );
 
         verifyNoInteractions(gateway);
     }
 
     @Test
     void anIdempotencyKeyIsRequired() {
-        assertThrows(IllegalArgumentException.class, () -> service.requestTopUp(
-            new TopUpCommand(CUSTOMER, "", AMOUNT, PaymentMethod.MIDTRANS_VA, VirtualAccountBank.BCA)
-        ));
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> service.requestTopUp(
+                new TopUpCommand(CUSTOMER, "", AMOUNT, PaymentMethod.MIDTRANS_VA, VirtualAccountBank.BCA)
+            )
+        );
 
         verifyNoInteractions(gateway);
     }
@@ -344,10 +380,23 @@ class TopUpServiceTest {
 
     @Test
     void aReferenceThatIsNotATopUpIsNotFound() {
-        when(transactions.findByReferenceNumber("escrow:hold:ORD-1")).thenReturn(Optional.of(new PaymentTransaction(
-            null, "escrow:hold:ORD-1", null, CUSTOMER, TransactionType.CHECKOUT_PAYMENT,
-            PaymentMethod.INTERNAL_WALLET, AMOUNT, TransactionStatus.SUCCESS, null, Instant.now(), null
-        )));
+        when(transactions.findByReferenceNumber("escrow:hold:ORD-1")).thenReturn(
+            Optional.of(
+                new PaymentTransaction(
+                    null,
+                    "escrow:hold:ORD-1",
+                    null,
+                    CUSTOMER,
+                    TransactionType.CHECKOUT_PAYMENT,
+                    PaymentMethod.INTERNAL_WALLET,
+                    AMOUNT,
+                    TransactionStatus.SUCCESS,
+                    null,
+                    Instant.now(),
+                    null
+                )
+            )
+        );
 
         assertThrows(TopUpNotFoundException.class, () -> service.settle("escrow:hold:ORD-1"));
 
@@ -364,9 +413,12 @@ class TopUpServiceTest {
 
         assertEquals(2, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100));
 
-        verify(transactions, times(2)).save(argThat((PaymentTransaction t) ->
-            t.status() == TransactionStatus.SUCCESS
-        ));
+        verify(transactions, times(2)).save(
+            argThat(
+                (PaymentTransaction t) ->
+                    t.status() == TransactionStatus.SUCCESS
+            )
+        );
     }
 
     @Test
@@ -379,9 +431,12 @@ class TopUpServiceTest {
 
         assertEquals(1, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100));
 
-        verify(transactions, never()).save(argThat((PaymentTransaction t) ->
-            "TOPUP-unreachable".equals(t.referenceNumber()) && t.status() != TransactionStatus.PENDING
-        ));
+        verify(transactions, never()).save(
+            argThat(
+                (PaymentTransaction t) ->
+                    "TOPUP-unreachable".equals(t.referenceNumber()) && t.status() != TransactionStatus.PENDING
+            )
+        );
         verify(gateway).statusOf("TOPUP-paid");
     }
 
@@ -485,7 +540,11 @@ class TopUpServiceTest {
 
     private static GatewayStatus gatewaySays(GatewaySettlement settlement, String grossAmount) {
         return new GatewayStatus(
-            settlement, grossAmount == null ? null : new BigDecimal(grossAmount), "mid-tx-1", "{}", null
+            settlement,
+            grossAmount == null ? null : new BigDecimal(grossAmount),
+            "mid-tx-1",
+            "{}",
+            null
         );
     }
 }

@@ -43,10 +43,12 @@ public final class SpiffeId {
         if (id == null || !id.startsWith(prefix)) {
             return Optional.empty();
         }
+
         String service = id.substring(prefix.length());
         if (service.isEmpty() || service.contains("/")) {
             return Optional.empty();
         }
+
         return Optional.of(service);
     }
 
@@ -57,6 +59,7 @@ public final class SpiffeId {
         } catch (CertificateParsingException malformed) {
             return Optional.empty();
         }
+
         if (names == null) {
             return Optional.empty();
         }
@@ -65,15 +68,18 @@ public final class SpiffeId {
             if (entry.size() < 2 || !Integer.valueOf(URI_SAN).equals(entry.get(0))) {
                 continue;
             }
+
             if (!(entry.get(1) instanceof String value)) {
                 continue;
             }
+
             URI uri;
             try {
                 uri = URI.create(value).normalize();
             } catch (IllegalArgumentException notAUri) {
                 continue;
             }
+
             String id = uri.toString();
             Optional<String> service = TRUST_PREFIXES.stream()
                     .map(prefix -> serviceIn(id, prefix))
@@ -83,8 +89,10 @@ public final class SpiffeId {
             if (service.isEmpty()) {
                 continue;
             }
+
             return service;
         }
+
         return Optional.empty();
     }
 }

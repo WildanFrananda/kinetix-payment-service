@@ -19,6 +19,7 @@ public class LiabilitySnapshotService {
                 "a liability snapshot is taken in one ISO 4217 currency, and '" + currency + "' is not one"
             );
         }
+
         LiabilitySnapshotTally tally = new LiabilitySnapshotTally(currency, sink);
         try {
             snapshots.read(currency, tally);

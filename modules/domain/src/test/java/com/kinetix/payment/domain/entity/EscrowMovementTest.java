@@ -8,15 +8,24 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class EscrowMovementTest {
-
     private static final String MERCHANT = "3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3";
     private static final String DRIVER = "b7e2c05f-9a34-4c88-b1d6-0e7a3f52d914";
 
     private static EscrowHold held() {
         return new EscrowHold(
-            42L, "ORD-1", "9f1d4a3e-1c62-4d0a-9a7b-2f5c8e0b41d7", MERCHANT, DRIVER,
-            new BigDecimal("150000.00"), new BigDecimal("130000.00"), new BigDecimal("20000.00"),
-            EscrowHold.EscrowStatus.HELD, Instant.now(), null, null, BigDecimal.ZERO
+            42L,
+            "ORD-1",
+            "9f1d4a3e-1c62-4d0a-9a7b-2f5c8e0b41d7",
+            MERCHANT,
+            DRIVER,
+            new BigDecimal("150000.00"),
+            new BigDecimal("130000.00"),
+            new BigDecimal("20000.00"),
+            EscrowHold.EscrowStatus.HELD,
+            Instant.now(),
+            null,
+            null,
+            BigDecimal.ZERO
         );
     }
 
@@ -31,9 +40,16 @@ class EscrowMovementTest {
     void aNegativeEscrowMovementIsRefusedOnEveryWallet() {
         BigDecimal negative = new BigDecimal("-1.00");
 
-        assertThrows(IllegalArgumentException.class, () -> MerchantWallet.createInitial(MERCHANT).addPendingEscrow(negative));
-        assertThrows(IllegalArgumentException.class, () -> DriverWallet.createInitial(DRIVER).addPendingEscrow(negative));
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> MerchantWallet.createInitial(MERCHANT).addPendingEscrow(negative)
+        );
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> DriverWallet.createInitial(DRIVER).addPendingEscrow(negative)
+        );
+        assertThrows(
+            IllegalArgumentException.class,
             () -> SuspenseWallet.createInitial(SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE).addPendingEscrow(negative)
         );
     }

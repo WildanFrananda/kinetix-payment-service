@@ -31,7 +31,15 @@ public class CustomerWalletJpaEntity {
 
     public CustomerWalletJpaEntity() {}
 
-    public CustomerWalletJpaEntity(Long id, String customerPrincipalId, BigDecimal balance, BigDecimal heldBalance, String currency, Instant createdAt, Instant updatedAt) {
+    public CustomerWalletJpaEntity(
+        Long id,
+        String customerPrincipalId,
+        BigDecimal balance,
+        BigDecimal heldBalance,
+        String currency,
+        Instant createdAt,
+        Instant updatedAt
+    ) {
         this.id = id;
         this.customerPrincipalId = customerPrincipalId;
         this.balance = balance;

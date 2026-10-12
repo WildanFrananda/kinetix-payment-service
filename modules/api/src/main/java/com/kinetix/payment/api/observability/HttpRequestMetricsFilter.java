@@ -34,7 +34,15 @@ public class HttpRequestMetricsFilter extends OncePerRequestFilter {
     };
 
     private static final Set<String> METHODS = Set.of(
-        "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE", "CONNECT"
+        "GET",
+        "HEAD",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "OPTIONS",
+        "TRACE",
+        "CONNECT"
     );
 
     private static final String NO_ROUTE = "UNKNOWN";
@@ -47,7 +55,9 @@ public class HttpRequestMetricsFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(
-        HttpServletRequest request, HttpServletResponse response, FilterChain chain
+        HttpServletRequest request,
+        HttpServletResponse response,
+        FilterChain chain
     ) throws ServletException, IOException {
         long startedAt = System.nanoTime();
         try {
@@ -56,6 +66,7 @@ public class HttpRequestMetricsFilter extends OncePerRequestFilter {
             record(request, System.nanoTime() - startedAt, statusAfterFailure(response));
             throw failure;
         }
+
         record(request, System.nanoTime() - startedAt, response.getStatus());
     }
 

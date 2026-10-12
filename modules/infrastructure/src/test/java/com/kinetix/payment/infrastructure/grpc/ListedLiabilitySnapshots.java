@@ -23,6 +23,7 @@ final class ListedLiabilitySnapshots implements LiabilitySnapshotPort {
         if (failure != null) {
             throw failure;
         }
+
         visitor.asOf(asOf);
         for (LiabilityHolder holder : holders) {
             holdersRead++;

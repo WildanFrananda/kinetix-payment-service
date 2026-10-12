@@ -7,7 +7,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class AccessClaimsTest {
-
     private static final String ALICE = "9f1d4a3e-1c62-4d0a-9a7b-2f5c8e0b41d7";
     private static final String BOB = "3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3";
 

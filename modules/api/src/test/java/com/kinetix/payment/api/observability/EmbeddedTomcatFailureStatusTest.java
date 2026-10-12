@@ -71,9 +71,11 @@ class EmbeddedTomcatFailureStatusTest {
     @Test
     void theCounterCarriesTheSameStatusTheHttpClientReceived() throws Exception {
         HttpResponse<String> response = HttpClient.newHttpClient().send(
-            HttpRequest.newBuilder(URI.create(
-                "http://localhost:" + tomcat.getConnector().getLocalPort() + "/boom"
-            )).build(),
+            HttpRequest.newBuilder(
+                URI.create(
+                    "http://localhost:" + tomcat.getConnector().getLocalPort() + "/boom"
+                )
+            ).build(),
             HttpResponse.BodyHandlers.ofString()
         );
 
@@ -82,8 +84,10 @@ class EmbeddedTomcatFailureStatusTest {
         String exposition = registry.scrape();
 
         assertTrue(
-            exposition.contains("kinetix_http_requests_total{method=\"GET\",route=\"UNKNOWN\","
-                + "status=\"500\"} 1.0"),
+            exposition.contains(
+                "kinetix_http_requests_total{method=\"GET\",route=\"UNKNOWN\","
+                    + "status=\"500\"} 1.0"
+            ),
             "the client received 500 and the counter says otherwise:\n" + exposition
         );
         assertFalse(
@@ -91,8 +95,10 @@ class EmbeddedTomcatFailureStatusTest {
             "an outage would read as a hundred per cent success:\n" + exposition
         );
         assertTrue(
-            exposition.contains("kinetix_http_request_duration_seconds_count{method=\"GET\","
-                + "route=\"UNKNOWN\"} 1"),
+            exposition.contains(
+                "kinetix_http_request_duration_seconds_count{method=\"GET\","
+                    + "route=\"UNKNOWN\"} 1"
+            ),
             "the container's ERROR dispatch was counted a second time, so every failure "
                 + "inflates the request rate:\n" + exposition
         );

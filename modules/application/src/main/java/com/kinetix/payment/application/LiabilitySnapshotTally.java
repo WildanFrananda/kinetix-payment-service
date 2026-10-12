@@ -23,9 +23,11 @@ final class LiabilitySnapshotTally implements LiabilitySnapshotVisitor {
         if (moment == null) {
             throw new IllegalStateException("the snapshot did not say when it was taken");
         }
+
         if (asOf != null) {
             throw new IllegalStateException("the snapshot was dated twice, " + asOf + " and " + moment);
         }
+
         asOf = moment;
         sink.begin(moment, currency);
     }
@@ -35,6 +37,7 @@ final class LiabilitySnapshotTally implements LiabilitySnapshotVisitor {
         if (asOf == null) {
             throw new IllegalStateException("the snapshot read a balance before it was dated");
         }
+
         for (LiabilityAccount account : holder.liabilities()) {
             if (!currency.equals(account.currency())) {
                 throw new IllegalStateException(
@@ -42,6 +45,7 @@ final class LiabilitySnapshotTally implements LiabilitySnapshotVisitor {
                         + " in " + account.currency()
                 );
             }
+
             accountCount++;
             total = total.add(account.balance());
             sink.account(account);
@@ -52,6 +56,7 @@ final class LiabilitySnapshotTally implements LiabilitySnapshotVisitor {
         if (asOf == null) {
             throw new IllegalStateException("the snapshot finished without ever being dated");
         }
+
         return new LiabilitySnapshotTotals(asOf, currency, accountCount, total);
     }
 }

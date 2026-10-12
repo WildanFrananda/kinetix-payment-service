@@ -45,30 +45,35 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
     ) {
         Payment.EscrowHoldResponse response;
         try {
-            response = toResponse(escrowService.createEscrowHold(new CreateEscrowHoldCommand(
-                request.getOrderNumber(),
-                request.getCustomerPrincipalId(),
-                request.getMerchantPrincipalId(),
-                request.getDriverPrincipalId().isBlank() ? null : request.getDriverPrincipalId(),
-                fromMoney(request.getTotalOrderAmount()),
-                fromMoney(request.getMerchantAmount()),
-                fromMoney(request.getShippingFeeAmount()),
-                idempotencyKeyOf(request.hasIdempotencyKey() ? request.getIdempotencyKey() : null),
-                EscrowRequestFingerprint.forCreateHold(
-                    request.getOrderNumber(),
-                    request.getCustomerPrincipalId(),
-                    request.getMerchantPrincipalId(),
-                    request.getDriverPrincipalId(),
-                    request.getTotalOrderAmount().getAmountMinor(),
-                    request.getMerchantAmount().getAmountMinor(),
-                    request.getShippingFeeAmount().getAmountMinor(),
-                    request.getTotalOrderAmount().getCurrency()
+            response = toResponse(
+                escrowService.createEscrowHold(
+                    new CreateEscrowHoldCommand(
+                        request.getOrderNumber(),
+                        request.getCustomerPrincipalId(),
+                        request.getMerchantPrincipalId(),
+                        request.getDriverPrincipalId().isBlank() ? null : request.getDriverPrincipalId(),
+                        fromMoney(request.getTotalOrderAmount()),
+                        fromMoney(request.getMerchantAmount()),
+                        fromMoney(request.getShippingFeeAmount()),
+                        idempotencyKeyOf(request.hasIdempotencyKey() ? request.getIdempotencyKey() : null),
+                        EscrowRequestFingerprint.forCreateHold(
+                            request.getOrderNumber(),
+                            request.getCustomerPrincipalId(),
+                            request.getMerchantPrincipalId(),
+                            request.getDriverPrincipalId(),
+                            request.getTotalOrderAmount().getAmountMinor(),
+                            request.getMerchantAmount().getAmountMinor(),
+                            request.getShippingFeeAmount().getAmountMinor(),
+                            request.getTotalOrderAmount().getCurrency()
+                        )
+                    )
                 )
-            )));
+            );
         } catch (RuntimeException failure) {
             responseObserver.onError(toStatusException(failure));
             return;
         }
+
         responseObserver.onNext(response);
         responseObserver.onCompleted();
     }
@@ -80,14 +85,17 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
     ) {
         Payment.EscrowHoldResponse response;
         try {
-            response = toResponse(escrowService.releaseEscrow(
-                request.getOrderNumber(),
-                idempotencyKeyOf(request.hasIdempotencyKey() ? request.getIdempotencyKey() : null)
-            ));
+            response = toResponse(
+                escrowService.releaseEscrow(
+                    request.getOrderNumber(),
+                    idempotencyKeyOf(request.hasIdempotencyKey() ? request.getIdempotencyKey() : null)
+                )
+            );
         } catch (RuntimeException failure) {
             responseObserver.onError(toStatusException(failure));
             return;
         }
+
         responseObserver.onNext(response);
         responseObserver.onCompleted();
     }
@@ -99,15 +107,18 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
     ) {
         Payment.EscrowHoldResponse response;
         try {
-            response = toResponse(escrowService.refundEscrow(
-                request.getOrderNumber(),
-                request.getReason(),
-                idempotencyKeyOf(request.hasIdempotencyKey() ? request.getIdempotencyKey() : null)
-            ));
+            response = toResponse(
+                escrowService.refundEscrow(
+                    request.getOrderNumber(),
+                    request.getReason(),
+                    idempotencyKeyOf(request.hasIdempotencyKey() ? request.getIdempotencyKey() : null)
+                )
+            );
         } catch (RuntimeException failure) {
             responseObserver.onError(toStatusException(failure));
             return;
         }
+
         responseObserver.onNext(response);
         responseObserver.onCompleted();
     }
@@ -119,16 +130,19 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
     ) {
         Payment.EscrowHoldResponse response;
         try {
-            response = toResponse(escrowService.refundGoods(
-                request.getOrderNumber(),
-                goodsRefundOf(request),
-                request.getReason(),
-                idempotencyKeyOf(request.hasIdempotencyKey() ? request.getIdempotencyKey() : null)
-            ));
+            response = toResponse(
+                escrowService.refundGoods(
+                    request.getOrderNumber(),
+                    goodsRefundOf(request),
+                    request.getReason(),
+                    idempotencyKeyOf(request.hasIdempotencyKey() ? request.getIdempotencyKey() : null)
+                )
+            );
         } catch (RuntimeException failure) {
             responseObserver.onError(toStatusException(failure));
             return;
         }
+
         responseObserver.onNext(response);
         responseObserver.onCompleted();
     }
@@ -140,14 +154,17 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
     ) {
         Payment.EscrowHoldResponse response;
         try {
-            response = toResponse(escrowService.settleShippingFee(
-                request.getOrderNumber(),
-                request.getDriverPrincipalId()
-            ));
+            response = toResponse(
+                escrowService.settleShippingFee(
+                    request.getOrderNumber(),
+                    request.getDriverPrincipalId()
+                )
+            );
         } catch (RuntimeException failure) {
             responseObserver.onError(toStatusException(failure));
             return;
         }
+
         responseObserver.onNext(response);
         responseObserver.onCompleted();
     }
@@ -159,13 +176,17 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
     ) {
         Payment.EscrowHoldResponse response;
         try {
-            response = toResponse(new EscrowOutcome(
-                escrowService.findByOrderNumber(request.getOrderNumber()), false
-            ));
+            response = toResponse(
+                new EscrowOutcome(
+                    escrowService.findByOrderNumber(request.getOrderNumber()),
+                    false
+                )
+            );
         } catch (RuntimeException failure) {
             responseObserver.onError(toStatusException(failure));
             return;
         }
+
         responseObserver.onNext(response);
         responseObserver.onCompleted();
     }
@@ -201,9 +222,11 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
         if (hold.createdAt() != null) {
             builder.setCreatedAt(toTimestamp(hold.createdAt()));
         }
+
         if (hold.releasedAt() != null) {
             builder.setReleasedAt(toTimestamp(hold.releasedAt()));
         }
+
         if (hold.shippingFeeSettledAt() != null) {
             builder.setShippingFeeSettledAt(toTimestamp(hold.shippingFeeSettledAt()));
         }
@@ -215,18 +238,23 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
         if (failure instanceof IdempotencyConflictException conflict) {
             return refusal(Status.INVALID_ARGUMENT, "IDEMPOTENCY_KEY_REUSED", conflict);
         }
+
         if (failure instanceof IllegalArgumentException invalid) {
             return refusal(Status.INVALID_ARGUMENT, "INVALID_ARGUMENT", invalid);
         }
+
         if (failure instanceof EscrowNotFoundException notFound) {
             return refusal(Status.NOT_FOUND, "ESCROW_NOT_FOUND", notFound);
         }
+
         if (failure instanceof InsufficientBalanceException insufficient) {
             return refusal(Status.FAILED_PRECONDITION, "INSUFFICIENT_BALANCE", insufficient);
         }
+
         if (failure instanceof DomainException refused) {
             return refusal(Status.FAILED_PRECONDITION, "ESCROW_REFUSED", refused);
         }
+
         if (failure instanceof DataAccessException
             || failure instanceof TransactionException
             || failure instanceof PersistenceException
@@ -234,6 +262,7 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
             LOG.warn("escrow call aborted on contention", failure);
             return refusal(Status.ABORTED, "ESCROW_CONTENTION", failure);
         }
+
         LOG.error("escrow call failed", failure);
         return Status.INTERNAL
             .withDescription("the escrow call could not be completed")
@@ -248,11 +277,13 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
         if (!request.hasAmount()) {
             throw new IllegalArgumentException("a goods refund names the amount to refund");
         }
+
         if (!"IDR".equals(request.getAmount().getCurrency())) {
             throw new IllegalArgumentException(
                 "a goods refund is in IDR, not '" + request.getAmount().getCurrency() + "'"
             );
         }
+
         return fromMoney(request.getAmount());
     }
 
@@ -260,6 +291,7 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
         if (money == null) {
             return BigDecimal.ZERO;
         }
+
         return BigDecimal.valueOf(money.getAmountMinor())
             .divide(MINOR_PER_MAJOR);
     }

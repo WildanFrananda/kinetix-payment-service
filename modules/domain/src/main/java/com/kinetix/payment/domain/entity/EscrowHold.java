@@ -22,12 +22,15 @@ public record EscrowHold(
         if (customerPrincipalId == null || customerPrincipalId.isBlank()) {
             throw new IllegalArgumentException("A customer principal id is required");
         }
+
         if (merchantPrincipalId == null || merchantPrincipalId.isBlank()) {
             throw new IllegalArgumentException("A merchant principal id is required");
         }
+
         if (goodsRefundedAmount == null || goodsRefundedAmount.signum() < 0) {
             throw new IllegalArgumentException("The goods refunded from a hold cannot be negative or missing");
         }
+
         if (merchantAmount != null && goodsRefundedAmount.compareTo(merchantAmount) > 0) {
             throw new IllegalArgumentException(
                 "order " + orderNumber + " cannot have refunded " + goodsRefundedAmount
@@ -60,6 +63,7 @@ public record EscrowHold(
                     + shippingFeeAmount + " to whoever delivers, which is " + parts
             );
         }
+
         return new EscrowHold(
             null,
             orderNumber,
@@ -91,15 +95,18 @@ public record EscrowHold(
                 "escrow for order " + orderNumber + " is " + status + "; goods are refunded only while it is held"
             );
         }
+
         if (amount == null || amount.signum() <= 0) {
             throw new IllegalArgumentException("a goods refund must be a positive amount");
         }
+
         if (amount.compareTo(merchantAmountOutstanding()) > 0) {
             throw new IllegalArgumentException(
                 "order " + orderNumber + " still holds " + merchantAmountOutstanding()
                     + " for the merchant, which cannot cover a goods refund of " + amount
             );
         }
+
         return new EscrowHold(
             id,
             orderNumber,
@@ -123,12 +130,14 @@ public record EscrowHold(
                 "a shipping fee cannot be settled without naming the driver it is owed to"
             );
         }
+
         if (shippingFeeSettledAt != null) {
             throw new IllegalStateException(
                 "the shipping fee for order " + orderNumber + " was already settled to "
                     + driverPrincipalId + " at " + shippingFeeSettledAt
             );
         }
+
         return new EscrowHold(
             id,
             orderNumber,

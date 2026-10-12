@@ -77,16 +77,20 @@ public record PaymentTransaction(
     }
 
     public PaymentTransaction concludedAs(
-        TransactionStatus outcome, String gatewayTransactionId, String response
+        TransactionStatus outcome,
+        String gatewayTransactionId,
+        String response
     ) {
         if (status != TransactionStatus.PENDING) {
             throw new IllegalStateException(
                 "transaction " + referenceNumber + " is already " + status + " and cannot become " + outcome
             );
         }
+
         if (outcome == TransactionStatus.PENDING) {
             throw new IllegalArgumentException("a transaction concludes as something other than pending");
         }
+
         return new PaymentTransaction(
             id,
             referenceNumber,

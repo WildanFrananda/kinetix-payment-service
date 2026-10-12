@@ -25,17 +25,20 @@ public final class EscrowRequestFingerprint {
         long shippingMinor,
         String currency
     ) {
-        return digest(String.join("\n",
-            "CREATE_HOLD",
-            text(orderNumber),
-            text(customerPrincipalId),
-            text(merchantPrincipalId),
-            text(driverPrincipalId),
-            Long.toString(totalMinor),
-            Long.toString(merchantMinor),
-            Long.toString(shippingMinor),
-            currency(currency)
-        ));
+        return digest(
+            String.join(
+                "\n",
+                "CREATE_HOLD",
+                text(orderNumber),
+                text(customerPrincipalId),
+                text(merchantPrincipalId),
+                text(driverPrincipalId),
+                Long.toString(totalMinor),
+                Long.toString(merchantMinor),
+                Long.toString(shippingMinor),
+                currency(currency)
+            )
+        );
     }
 
     public static String forCreateHold(

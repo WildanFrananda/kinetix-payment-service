@@ -63,12 +63,14 @@ class MidtransPaymentGatewayAdapterTest {
                     Thread.currentThread().interrupt();
                 }
             }
+
             byte[] bytes = answerBody.getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(answerStatus, bytes.length);
             try (OutputStream out = exchange.getResponseBody()) {
                 out.write(bytes);
             }
         });
+
         handlers = Executors.newCachedThreadPool();
         server.setExecutor(handlers);
         server.start();
@@ -83,11 +85,14 @@ class MidtransPaymentGatewayAdapterTest {
 
     @Test
     void aVirtualAccountChargeIsPostedToV2ChargeWithTheBankTheWholeAmountAndTheServerKey() throws Exception {
-        answer(200, """
-            {"status_code":"201","status_message":"Success, Bank Transfer transaction is created",
-             "transaction_id":"be03df7d","order_id":"TOPUP-1","gross_amount":"50000.00",
-             "transaction_status":"pending","va_numbers":[{"bank":"bca","va_number":"91019021579"}]}
-            """);
+        answer(
+            200,
+            """
+                {"status_code":"201","status_message":"Success, Bank Transfer transaction is created",
+                 "transaction_id":"be03df7d","order_id":"TOPUP-1","gross_amount":"50000.00",
+                 "transaction_status":"pending","va_numbers":[{"bank":"bca","va_number":"91019021579"}]}
+                """
+        );
 
         GatewayCharge charge = adapter.charge(
             new GatewayChargeRequest("TOPUP-1", 50000L, PaymentMethod.MIDTRANS_VA, VirtualAccountBank.BCA)
@@ -114,10 +119,13 @@ class MidtransPaymentGatewayAdapterTest {
 
     @Test
     void permataIsItsOwnPaymentTypeAndAnswersWithItsOwnField() throws Exception {
-        answer(200, """
-            {"status_code":"201","transaction_id":"p1","transaction_status":"pending",
-             "permata_va_number":"8562000087926752"}
-            """);
+        answer(
+            200,
+            """
+                {"status_code":"201","transaction_id":"p1","transaction_status":"pending",
+                 "permata_va_number":"8562000087926752"}
+                """
+        );
 
         GatewayCharge charge = adapter.charge(
             new GatewayChargeRequest("TOPUP-2", 25000L, PaymentMethod.MIDTRANS_VA, VirtualAccountBank.PERMATA)
@@ -129,11 +137,14 @@ class MidtransPaymentGatewayAdapterTest {
 
     @Test
     void aQrisChargeIsPaymentTypeQrisAndAnswersWithTheQrCodeAction() throws Exception {
-        answer(200, """
-            {"status_code":"201","transaction_id":"0d8178e1","transaction_status":"pending",
-             "actions":[{"name":"generate-qr-code","method":"GET",
-                         "url":"https://api.sandbox.midtrans.com/v2/qris/0d8178e1/qr-code"}]}
-            """);
+        answer(
+            200,
+            """
+                {"status_code":"201","transaction_id":"0d8178e1","transaction_status":"pending",
+                 "actions":[{"name":"generate-qr-code","method":"GET",
+                             "url":"https://api.sandbox.midtrans.com/v2/qris/0d8178e1/qr-code"}]}
+                """
+        );
 
         GatewayCharge charge = adapter.charge(
             new GatewayChargeRequest("TOPUP-3", 75000L, PaymentMethod.MIDTRANS_QRIS, null)
@@ -200,10 +211,13 @@ class MidtransPaymentGatewayAdapterTest {
 
     @Test
     void aSettledTransactionIsReadFromTheV2StatusEndpoint() {
-        answer(200, """
-            {"status_code":"200","transaction_id":"be03df7d","order_id":"TOPUP-1",
-             "gross_amount":"50000.00","transaction_status":"settlement"}
-            """);
+        answer(
+            200,
+            """
+                {"status_code":"200","transaction_id":"be03df7d","order_id":"TOPUP-1",
+                 "gross_amount":"50000.00","transaction_status":"settlement"}
+                """
+        );
 
         GatewayStatus status = adapter.statusOf("TOPUP-1");
 
@@ -266,7 +280,11 @@ class MidtransPaymentGatewayAdapterTest {
 
     private MidtransPaymentGatewayAdapter adapterWithRequestTimeout(long requestTimeoutMillis) {
         return new MidtransPaymentGatewayAdapter(
-            SERVER_KEY, "http://127.0.0.1:" + server.getAddress().getPort() + "/", 1_000, requestTimeoutMillis, json
+            SERVER_KEY,
+            "http://127.0.0.1:" + server.getAddress().getPort() + "/",
+            1_000,
+            requestTimeoutMillis,
+            json
         );
     }
 

@@ -25,9 +25,11 @@ final class ScriptedLiabilitySnapshots implements LiabilitySnapshotPort {
         if (asOf != null) {
             visitor.asOf(asOf);
         }
+
         for (LiabilityHolder holder : holders) {
             visitor.holder(holder);
         }
+
         if (failure != null) {
             throw failure;
         }

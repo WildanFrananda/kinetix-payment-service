@@ -88,6 +88,7 @@ public class GlobalExceptionHandler {
         if (referenceNumber != null) {
             body.put("referenceNumber", referenceNumber);
         }
+
         return body;
     }
 }

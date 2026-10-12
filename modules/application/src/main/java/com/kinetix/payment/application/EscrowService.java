@@ -87,21 +87,26 @@ public class EscrowService {
         Optional<EscrowIdempotencyRecord> seen =
             idempotencyRepository.find(EscrowOperation.CREATE_HOLD, key);
         if (seen.isPresent()) {
-            return inOrderTransaction(command.orderNumber(),
+            return inOrderTransaction(
+                command.orderNumber(),
                 () -> replayCreateHold(seen.get(), command.requestFingerprint())
             );
         }
 
         try {
-            return inOrderTransaction(command.orderNumber(),
+            return inOrderTransaction(
+                command.orderNumber(),
                 () -> applyCreateHold(command, key, source)
             );
         } catch (DuplicateIdempotencyKeyException duplicateKey) {
-            return inOrderTransaction(command.orderNumber(), () -> replayCreateHold(
-                idempotencyRepository.find(EscrowOperation.CREATE_HOLD, key)
-                    .orElseThrow(() -> duplicateKey),
-                command.requestFingerprint()
-            ));
+            return inOrderTransaction(
+                command.orderNumber(),
+                () -> replayCreateHold(
+                    idempotencyRepository.find(EscrowOperation.CREATE_HOLD, key)
+                        .orElseThrow(() -> duplicateKey),
+                    command.requestFingerprint()
+                )
+            );
         } catch (DuplicateOrderNumberException duplicateOrder) {
             return recoverFromDuplicateOrderNumber(command, key, source);
         }
@@ -123,15 +128,19 @@ public class EscrowService {
         }
 
         try {
-            return inOrderTransaction(orderNumber,
+            return inOrderTransaction(
+                orderNumber,
                 () -> applyRelease(orderNumber, key, source, fingerprint)
             );
         } catch (DuplicateIdempotencyKeyException duplicateKey) {
-            return inOrderTransaction(orderNumber, () -> replaySettled(
-                idempotencyRepository.find(EscrowOperation.RELEASE, key)
-                    .orElseThrow(() -> duplicateKey),
-                fingerprint
-            ));
+            return inOrderTransaction(
+                orderNumber,
+                () -> replaySettled(
+                    idempotencyRepository.find(EscrowOperation.RELEASE, key)
+                        .orElseThrow(() -> duplicateKey),
+                    fingerprint
+                )
+            );
         }
     }
 
@@ -141,20 +150,25 @@ public class EscrowService {
                 "a shipping fee cannot be settled without naming the driver it is owed to"
             );
         }
-        return inOrderTransaction(orderNumber,
+
+        return inOrderTransaction(
+            orderNumber,
             () -> applySettleShippingFee(orderNumber, driverPrincipalId)
         );
     }
 
     private EscrowOutcome applySettleShippingFee(String orderNumber, String driverPrincipalId) {
         EscrowHold hold = escrowRepository.findByOrderNumberForUpdate(orderNumber)
-            .orElseThrow(() -> new EscrowNotFoundException(
-                "Escrow hold not found for order: " + orderNumber
-            ));
+            .orElseThrow(
+                () -> new EscrowNotFoundException(
+                    "Escrow hold not found for order: " + orderNumber
+                )
+            );
 
         if (hold.status() == EscrowHold.EscrowStatus.REFUNDED) {
-            throw new DomainException("escrow for order " + orderNumber
-                + " was refunded to the customer; there is no shipping fee left to pay"
+            throw new DomainException(
+                "escrow for order " + orderNumber
+                    + " was refunded to the customer; there is no shipping fee left to pay"
             );
         }
 
@@ -162,21 +176,25 @@ public class EscrowService {
             if (driverPrincipalId.equals(hold.driverPrincipalId())) {
                 return new EscrowOutcome(hold, true);
             }
-            throw new DomainException("the shipping fee for order " + orderNumber
-                + " was already settled to " + hold.driverPrincipalId()
-                + " and cannot be re-pointed at " + driverPrincipalId
+
+            throw new DomainException(
+                "the shipping fee for order " + orderNumber
+                    + " was already settled to " + hold.driverPrincipalId()
+                    + " and cannot be re-pointed at " + driverPrincipalId
             );
         }
 
         if (hold.status() == EscrowHold.EscrowStatus.RELEASED && hasDriver(hold.driverPrincipalId())) {
-            throw new DomainException("the shipping fee for order " + orderNumber
-                + " was already paid to " + hold.driverPrincipalId() + " when the escrow was released"
+            throw new DomainException(
+                "the shipping fee for order " + orderNumber
+                    + " was already paid to " + hold.driverPrincipalId() + " when the escrow was released"
             );
         }
 
         if (!isMoney(hold.shippingFeeAmount())) {
             return new EscrowOutcome(
-                escrowRepository.save(hold.settleShippingFeeTo(driverPrincipalId)), false
+                escrowRepository.save(hold.settleShippingFeeTo(driverPrincipalId)),
+                false
             );
         }
 
@@ -192,11 +210,13 @@ public class EscrowService {
 
         if (hold.status() == EscrowHold.EscrowStatus.HELD && hasDriver(hold.driverPrincipalId())) {
             if (!driverPrincipalId.equals(hold.driverPrincipalId())) {
-                throw new DomainException("order " + orderNumber + " holds its shipping fee pending"
-                    + " for " + hold.driverPrincipalId() + ", so it cannot be settled to "
-                    + driverPrincipalId + " without first releasing that hold"
+                throw new DomainException(
+                    "order " + orderNumber + " holds its shipping fee pending"
+                        + " for " + hold.driverPrincipalId() + ", so it cannot be settled to "
+                        + driverPrincipalId + " without first releasing that hold"
                 );
             }
+
             driverWalletRepository.save(
                 driverWallet.releaseEscrowToAvailable(hold.shippingFeeAmount())
             );
@@ -217,8 +237,12 @@ public class EscrowService {
         String reference = hold.status() == EscrowHold.EscrowStatus.RELEASED
             ? keptFeePaidReference(orderNumber)
             : ledgerReference(PaymentTransaction.TransactionType.SHIPPING_FEE, orderNumber);
-        recordLedgerEntryAt(reference,
-            PaymentTransaction.TransactionType.SHIPPING_FEE, driverPrincipalId, hold.shippingFeeAmount());
+        recordLedgerEntryAt(
+            reference,
+            PaymentTransaction.TransactionType.SHIPPING_FEE,
+            driverPrincipalId,
+            hold.shippingFeeAmount()
+        );
 
         return new EscrowOutcome(settled, false);
     }
@@ -229,9 +253,10 @@ public class EscrowService {
             .filter(entry -> SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE.equals(entry.principalId()))
             .isPresent();
         if (!kept) {
-            throw new DomainException("order " + orderNumber + " was released without its shipping fee"
-                + " being kept for a courier, so nothing is held for it; paying it would spend the fee"
-                + " kept for another order"
+            throw new DomainException(
+                "order " + orderNumber + " was released without its shipping fee"
+                    + " being kept for a courier, so nothing is held for it; paying it would spend the fee"
+                    + " kept for another order"
             );
         }
     }
@@ -248,15 +273,19 @@ public class EscrowService {
         }
 
         try {
-            return inOrderTransaction(orderNumber,
+            return inOrderTransaction(
+                orderNumber,
                 () -> applyRefund(orderNumber, reason, key, source, fingerprint)
             );
         } catch (DuplicateIdempotencyKeyException duplicateKey) {
-            return inOrderTransaction(orderNumber, () -> replaySettled(
-                idempotencyRepository.find(EscrowOperation.REFUND, key)
-                    .orElseThrow(() -> duplicateKey),
-                fingerprint
-            ));
+            return inOrderTransaction(
+                orderNumber,
+                () -> replaySettled(
+                    idempotencyRepository.find(EscrowOperation.REFUND, key)
+                        .orElseThrow(() -> duplicateKey),
+                    fingerprint
+                )
+            );
         }
     }
 
@@ -264,6 +293,7 @@ public class EscrowService {
         if (amount == null || amount.signum() <= 0) {
             throw new IllegalArgumentException("a goods refund must be a positive amount");
         }
+
         String key = resolveKey(idempotencyKey, orderNumber);
         IdempotencyKeySource source = sourceOf(idempotencyKey, EscrowOperation.REFUND_GOODS, orderNumber);
         String fingerprint = EscrowRequestFingerprint.forRefundGoods(orderNumber, amount);
@@ -275,30 +305,47 @@ public class EscrowService {
         }
 
         try {
-            return inOrderTransaction(orderNumber,
+            return inOrderTransaction(
+                orderNumber,
                 () -> applyRefundGoods(orderNumber, amount, reason, key, source, fingerprint)
             );
         } catch (DuplicateIdempotencyKeyException duplicateKey) {
-            return inOrderTransaction(orderNumber, () -> replaySettled(
-                idempotencyRepository.find(EscrowOperation.REFUND_GOODS, key)
-                    .orElseThrow(() -> duplicateKey),
-                fingerprint
-            ));
+            return inOrderTransaction(
+                orderNumber,
+                () -> replaySettled(
+                    idempotencyRepository.find(EscrowOperation.REFUND_GOODS, key)
+                        .orElseThrow(() -> duplicateKey),
+                    fingerprint
+                )
+            );
         }
     }
 
     private EscrowOutcome applyRefundGoods(
-        String orderNumber, BigDecimal amount, String reason, String key, IdempotencyKeySource source,
+        String orderNumber,
+        BigDecimal amount,
+        String reason,
+        String key,
+        IdempotencyKeySource source,
         String fingerprint
     ) {
-        EscrowIdempotencyRecord record = idempotencyRepository.save(EscrowIdempotencyRecord.opening(
-            EscrowOperation.REFUND_GOODS, key, source, orderNumber, fingerprint, trimDetail(reason)
-        ));
+        EscrowIdempotencyRecord record = idempotencyRepository.save(
+            EscrowIdempotencyRecord.opening(
+                EscrowOperation.REFUND_GOODS,
+                key,
+                source,
+                orderNumber,
+                fingerprint,
+                trimDetail(reason)
+            )
+        );
 
         EscrowHold hold = escrowRepository.findByOrderNumberForUpdate(orderNumber)
-            .orElseThrow(() -> new EscrowNotFoundException(
-                "Escrow hold not found for order: " + orderNumber
-            ));
+            .orElseThrow(
+                () -> new EscrowNotFoundException(
+                    "Escrow hold not found for order: " + orderNumber
+                )
+            );
         requireStillHeld(hold, "refunded for returned goods");
         EscrowHold refunded = hold.refundGoods(amount);
 
@@ -315,8 +362,12 @@ public class EscrowService {
         customerWalletRepository.save(customerWallet.topUp(amount));
 
         EscrowHold saved = escrowRepository.save(refunded);
-        recordLedgerEntryAt(goodsRefundReference(refunded),
-            PaymentTransaction.TransactionType.REFUND, hold.customerPrincipalId(), amount);
+        recordLedgerEntryAt(
+            goodsRefundReference(refunded),
+            PaymentTransaction.TransactionType.REFUND,
+            hold.customerPrincipalId(),
+            amount
+        );
 
         return new EscrowOutcome(link(record, saved), false);
     }
@@ -326,30 +377,43 @@ public class EscrowService {
     }
 
     private EscrowOutcome applyCreateHold(
-        CreateEscrowHoldCommand command, String key, IdempotencyKeySource source
+        CreateEscrowHoldCommand command,
+        String key,
+        IdempotencyKeySource source
     ) {
-        EscrowIdempotencyRecord record = idempotencyRepository.save(EscrowIdempotencyRecord.opening(
-            EscrowOperation.CREATE_HOLD, key, source, command.orderNumber(),
-            command.requestFingerprint(), null
-        ));
+        EscrowIdempotencyRecord record = idempotencyRepository.save(
+            EscrowIdempotencyRecord.opening(
+                EscrowOperation.CREATE_HOLD,
+                key,
+                source,
+                command.orderNumber(),
+                command.requestFingerprint(),
+                null
+            )
+        );
 
         if (idempotencyRepository.existsFor(EscrowOperation.REFUND, command.orderNumber())) {
-            throw new OrderAlreadyUnwoundException("escrow for order " + command.orderNumber()
-                + " has already been refunded and cannot be held again"
+            throw new OrderAlreadyUnwoundException(
+                "escrow for order " + command.orderNumber()
+                    + " has already been refunded and cannot be held again"
             );
         }
 
-        EscrowHold hold = escrowRepository.save(EscrowHold.createNewHold(
-            command.orderNumber(),
+        EscrowHold hold = escrowRepository.save(
+            EscrowHold.createNewHold(
+                command.orderNumber(),
+                command.customerPrincipalId(),
+                command.merchantPrincipalId(),
+                command.driverPrincipalId(),
+                command.totalOrderAmount(),
+                command.merchantAmount(),
+                command.shippingFeeAmount()
+            )
+        );
+
+        lockWalletOwners(
             command.customerPrincipalId(),
             command.merchantPrincipalId(),
-            command.driverPrincipalId(),
-            command.totalOrderAmount(),
-            command.merchantAmount(),
-            command.shippingFeeAmount()
-        ));
-
-        lockWalletOwners(command.customerPrincipalId(), command.merchantPrincipalId(),
             shippingFeeHolder(command.driverPrincipalId())
         );
 
@@ -374,12 +438,17 @@ public class EscrowService {
             );
         }
 
-        recordLedgerEntry(PaymentTransaction.TransactionType.CHECKOUT_PAYMENT,
-            command.orderNumber(), command.customerPrincipalId(), command.totalOrderAmount()
+        recordLedgerEntry(
+            PaymentTransaction.TransactionType.CHECKOUT_PAYMENT,
+            command.orderNumber(),
+            command.customerPrincipalId(),
+            command.totalOrderAmount()
         );
 
-        LOG.debug("escrow idempotency: first sight of key {} for CREATE_HOLD on order {}",
-            key, command.orderNumber()
+        LOG.debug(
+            "escrow idempotency: first sight of key {} for CREATE_HOLD on order {}",
+            key,
+            command.orderNumber()
         );
         return new EscrowOutcome(link(record, hold), false);
     }
@@ -388,76 +457,120 @@ public class EscrowService {
         requireSameRequest(record, fingerprint);
 
         EscrowHold hold = escrowRepository.findByOrderNumberForUpdate(record.orderNumber())
-            .orElseThrow(() -> new EscrowNotFoundException("Escrow hold not found for order: "
-                + record.orderNumber()
-            ));
+            .orElseThrow(
+                () -> new EscrowNotFoundException(
+                    "Escrow hold not found for order: "
+                        + record.orderNumber()
+                )
+            );
 
         requireStillHeld(hold, "held again");
 
-        LOG.warn("escrow idempotency: CREATE_HOLD for order {} is a replay of key {} first applied "
-                + "at {}; replying already_applied",
-            record.orderNumber(), record.idempotencyKey(), record.createdAt()
+        LOG.warn(
+            "escrow idempotency: CREATE_HOLD for order {} is a replay of key {} first applied "
+                    + "at {}; replying already_applied",
+            record.orderNumber(),
+            record.idempotencyKey(),
+            record.createdAt()
         );
         return new EscrowOutcome(hold, true);
     }
 
     private EscrowOutcome recoverFromDuplicateOrderNumber(
-        CreateEscrowHoldCommand command, String key, IdempotencyKeySource source
+        CreateEscrowHoldCommand command,
+        String key,
+        IdempotencyKeySource source
     ) {
         EscrowHold hold = inOrderTransaction(command.orderNumber(), () -> {
             EscrowHold existing = escrowRepository.findByOrderNumberForUpdate(command.orderNumber())
-                .orElseThrow(() -> new EscrowNotFoundException("Escrow hold not found for order: "
-                    + command.orderNumber()
-                ));
+                .orElseThrow(
+                    () -> new EscrowNotFoundException(
+                        "Escrow hold not found for order: "
+                            + command.orderNumber()
+                    )
+                );
             requireStillHeld(existing, "held again");
 
             String persisted = EscrowRequestFingerprint.forCreateHold(existing);
             if (!persisted.equals(command.requestFingerprint())) {
-                LOG.error("escrow idempotency CONFLICT: order {} already holds escrow with "
-                        + "fingerprint {}, and key {} has now arrived for it with fingerprint {}; "
-                        + "refusing and applying nothing",
-                    command.orderNumber(), persisted, key, command.requestFingerprint()
+                LOG.error(
+                    "escrow idempotency CONFLICT: order {} already holds escrow with "
+                            + "fingerprint {}, and key {} has now arrived for it with fingerprint {}; "
+                            + "refusing and applying nothing",
+                    command.orderNumber(),
+                    persisted,
+                    key,
+                    command.requestFingerprint()
                 );
-                throw new IdempotencyConflictException("escrow for order " + command.orderNumber()
-                    + " already exists on different terms"
+                throw new IdempotencyConflictException(
+                    "escrow for order " + command.orderNumber()
+                        + " already exists on different terms"
                 );
             }
+
             return existing;
         });
 
         try {
-            inOrderTransaction(command.orderNumber(), () -> idempotencyRepository.save(
-                EscrowIdempotencyRecord.opening(EscrowOperation.CREATE_HOLD, key, source,
-                    command.orderNumber(), command.requestFingerprint(), null
-                ).appliedTo(hold.id())
-            ));
+            inOrderTransaction(
+                command.orderNumber(),
+                () -> idempotencyRepository.save(
+                    EscrowIdempotencyRecord.opening(
+                        EscrowOperation.CREATE_HOLD,
+                        key,
+                        source,
+                        command.orderNumber(),
+                        command.requestFingerprint(),
+                        null
+                    ).appliedTo(hold.id())
+                )
+            );
         } catch (DuplicateIdempotencyKeyException concurrentAlias) {
-            LOG.debug("escrow idempotency: the alias for key {} on order {} was written "
-                + "concurrently", key, command.orderNumber()
+            LOG.debug(
+                "escrow idempotency: the alias for key {} on order {} was written "
+                    + "concurrently",
+                key,
+                command.orderNumber()
             );
         }
 
-        LOG.warn("escrow idempotency: CREATE_HOLD for order {} arrived under a new key {} with the "
-            + "same terms as the live hold; replying already_applied", command.orderNumber(), key
+        LOG.warn(
+            "escrow idempotency: CREATE_HOLD for order {} arrived under a new key {} with the "
+                + "same terms as the live hold; replying already_applied",
+            command.orderNumber(),
+            key
         );
         return new EscrowOutcome(hold, true);
     }
 
     private EscrowOutcome applyRelease(
-        String orderNumber, String key, IdempotencyKeySource source, String fingerprint
+        String orderNumber,
+        String key,
+        IdempotencyKeySource source,
+        String fingerprint
     ) {
-        EscrowIdempotencyRecord record = idempotencyRepository.save(EscrowIdempotencyRecord.opening(
-            EscrowOperation.RELEASE, key, source, orderNumber, fingerprint, null)
+        EscrowIdempotencyRecord record = idempotencyRepository.save(
+            EscrowIdempotencyRecord.opening(
+                EscrowOperation.RELEASE,
+                key,
+                source,
+                orderNumber,
+                fingerprint,
+                null
+            )
         );
 
         EscrowHold hold = escrowRepository.findByOrderNumberForUpdate(orderNumber)
-            .orElseThrow(() -> new EscrowNotFoundException(
-                "Escrow hold not found for order: " + orderNumber
-            ));
+            .orElseThrow(
+                () -> new EscrowNotFoundException(
+                    "Escrow hold not found for order: " + orderNumber
+                )
+            );
 
         if (hold.status() == EscrowHold.EscrowStatus.RELEASED) {
             return new EscrowOutcome(link(record, hold), true);
         }
+
         requireStillHeld(hold, "released");
 
         lockWalletOwners(hold.merchantPrincipalId(), shippingFeeHolder(hold.driverPrincipalId()));
@@ -471,8 +584,10 @@ public class EscrowService {
         }
 
         if (hold.shippingFeeSettled()) {
-            LOG.debug("escrow release for order {}: shipping fee already settled to {}",
-                orderNumber, hold.driverPrincipalId()
+            LOG.debug(
+                "escrow release for order {}: shipping fee already settled to {}",
+                orderNumber,
+                hold.driverPrincipalId()
             );
         } else if (hasDriver(hold.driverPrincipalId())) {
             DriverWallet driverWallet = driverWalletRepository
@@ -483,34 +598,56 @@ public class EscrowService {
             suspenseWalletRepository.save(
                 unassignedDriverFees().releaseEscrowToAvailable(hold.shippingFeeAmount())
             );
-            recordLedgerEntry(PaymentTransaction.TransactionType.SHIPPING_FEE,
-                orderNumber, SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE, hold.shippingFeeAmount()
+            recordLedgerEntry(
+                PaymentTransaction.TransactionType.SHIPPING_FEE,
+                orderNumber,
+                SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE,
+                hold.shippingFeeAmount()
             );
         }
 
         EscrowHold released = escrowRepository.save(hold.markAsReleased());
         if (outstanding.signum() > 0) {
-            recordLedgerEntry(PaymentTransaction.TransactionType.ESCROW_RELEASE,
-                orderNumber, hold.merchantPrincipalId(), outstanding);
+            recordLedgerEntry(
+                PaymentTransaction.TransactionType.ESCROW_RELEASE,
+                orderNumber,
+                hold.merchantPrincipalId(),
+                outstanding
+            );
         }
 
         return new EscrowOutcome(link(record, released), false);
     }
 
     private EscrowOutcome applyRefund(
-        String orderNumber, String reason, String key, IdempotencyKeySource source, String fingerprint
+        String orderNumber,
+        String reason,
+        String key,
+        IdempotencyKeySource source,
+        String fingerprint
     ) {
-        EscrowIdempotencyRecord record = idempotencyRepository.save(EscrowIdempotencyRecord.opening(
-            EscrowOperation.REFUND, key, source, orderNumber, fingerprint, trimDetail(reason)
-        ));
+        EscrowIdempotencyRecord record = idempotencyRepository.save(
+            EscrowIdempotencyRecord.opening(
+                EscrowOperation.REFUND,
+                key,
+                source,
+                orderNumber,
+                fingerprint,
+                trimDetail(reason)
+            )
+        );
 
         EscrowHold hold = escrowRepository.findByOrderNumberForUpdate(orderNumber).orElse(null);
         if (hold == null) {
-            LOG.warn("escrow idempotency: REFUND of order {} found no hold to unwind; recording a "
-                + "tombstone under key {}", orderNumber, key
+            LOG.warn(
+                "escrow idempotency: REFUND of order {} found no hold to unwind; recording a "
+                    + "tombstone under key {}",
+                orderNumber,
+                key
             );
             return new EscrowOutcome(null, false);
         }
+
         return refundLockedHold(record, hold);
     }
 
@@ -521,9 +658,11 @@ public class EscrowService {
             return new EscrowOutcome(null, true);
         }
 
-        LOG.warn("escrow idempotency: REFUND of order {} found no hold when it first ran and a hold "
-            + "has committed since; unwinding it now under key {}",
-            record.orderNumber(), record.idempotencyKey()
+        LOG.warn(
+            "escrow idempotency: REFUND of order {} found no hold when it first ran and a hold "
+                + "has committed since; unwinding it now under key {}",
+            record.orderNumber(),
+            record.idempotencyKey()
         );
         return refundLockedHold(record, hold);
     }
@@ -532,22 +671,28 @@ public class EscrowService {
         if (hold.status() == EscrowHold.EscrowStatus.REFUNDED) {
             return new EscrowOutcome(link(record, hold), true);
         }
+
         if (hold.status() == EscrowHold.EscrowStatus.RELEASED) {
-            throw new DomainException("escrow for order " + hold.orderNumber()
-                + " was already released and cannot be refunded here"
+            throw new DomainException(
+                "escrow for order " + hold.orderNumber()
+                    + " was already released and cannot be refunded here"
             );
         }
+
         requireStillHeld(hold, "refunded");
 
         if (hold.shippingFeeSettled()) {
-            throw new DomainException("order " + hold.orderNumber() + " has already paid its"
-                + " shipping fee to " + hold.driverPrincipalId() + " for a completed delivery."
-                + " Refunding the full amount here would take that fee from nobody's account and"
-                + " leave no record of it. Refund the merchant amount deliberately instead."
+            throw new DomainException(
+                "order " + hold.orderNumber() + " has already paid its"
+                    + " shipping fee to " + hold.driverPrincipalId() + " for a completed delivery."
+                    + " Refunding the full amount here would take that fee from nobody's account and"
+                    + " leave no record of it. Refund the merchant amount deliberately instead."
             );
         }
 
-        lockWalletOwners(hold.customerPrincipalId(), hold.merchantPrincipalId(),
+        lockWalletOwners(
+            hold.customerPrincipalId(),
+            hold.merchantPrincipalId(),
             shippingFeeHolder(hold.driverPrincipalId())
         );
 
@@ -574,8 +719,12 @@ public class EscrowService {
         }
 
         EscrowHold refunded = escrowRepository.save(hold.markAsRefunded());
-        recordLedgerEntry(PaymentTransaction.TransactionType.REFUND,
-            hold.orderNumber(), hold.customerPrincipalId(), stillHeld);
+        recordLedgerEntry(
+            PaymentTransaction.TransactionType.REFUND,
+            hold.orderNumber(),
+            hold.customerPrincipalId(),
+            stillHeld
+        );
 
         return new EscrowOutcome(link(record, refunded), false);
     }
@@ -588,13 +737,20 @@ public class EscrowService {
         }
 
         EscrowHold hold = escrowRepository.findByOrderNumberForUpdate(record.orderNumber())
-            .orElseThrow(() -> new EscrowNotFoundException("Escrow hold not found for order: "
-                + record.orderNumber()
-            ));
+            .orElseThrow(
+                () -> new EscrowNotFoundException(
+                    "Escrow hold not found for order: "
+                        + record.orderNumber()
+                )
+            );
 
-        LOG.warn("escrow idempotency: {} for order {} is a replay of key {} first applied at {}; "
-                + "replying already_applied",
-            record.operation(), record.orderNumber(), record.idempotencyKey(), record.createdAt()
+        LOG.warn(
+            "escrow idempotency: {} for order {} is a replay of key {} first applied at {}; "
+                    + "replying already_applied",
+            record.operation(),
+            record.orderNumber(),
+            record.idempotencyKey(),
+            record.createdAt()
         );
         return new EscrowOutcome(hold, true);
     }
@@ -605,27 +761,35 @@ public class EscrowService {
     }
 
     private void recordLedgerEntry(
-        PaymentTransaction.TransactionType type, String orderNumber, String principalId, BigDecimal amount
+        PaymentTransaction.TransactionType type,
+        String orderNumber,
+        String principalId,
+        BigDecimal amount
     ) {
         recordLedgerEntryAt(ledgerReference(type, orderNumber), type, principalId, amount);
     }
 
     private void recordLedgerEntryAt(
-        String reference, PaymentTransaction.TransactionType type, String principalId, BigDecimal amount
+        String reference,
+        PaymentTransaction.TransactionType type,
+        String principalId,
+        BigDecimal amount
     ) {
-        paymentTransactionRepository.save(new PaymentTransaction(
-            null,
-            reference,
-            null,
-            principalId,
-            type,
-            PaymentTransaction.PaymentMethod.INTERNAL_WALLET,
-            amount,
-            PaymentTransaction.TransactionStatus.SUCCESS,
-            null,
-            Instant.now(),
-            null
-        ));
+        paymentTransactionRepository.save(
+            new PaymentTransaction(
+                null,
+                reference,
+                null,
+                principalId,
+                type,
+                PaymentTransaction.PaymentMethod.INTERNAL_WALLET,
+                amount,
+                PaymentTransaction.TransactionStatus.SUCCESS,
+                null,
+                Instant.now(),
+                null
+            )
+        );
     }
 
     private static String keptFeePaidReference(String orderNumber) {
@@ -637,7 +801,8 @@ public class EscrowService {
     }
 
     private static String ledgerReference(
-        PaymentTransaction.TransactionType type, String orderNumber
+        PaymentTransaction.TransactionType type,
+        String orderNumber
     ) {
         String prefix = switch (type) {
             case CHECKOUT_PAYMENT -> "escrow:hold:";
@@ -646,6 +811,7 @@ public class EscrowService {
             case SHIPPING_FEE -> "escrow:shipping:";
             case TOPUP -> throw new IllegalArgumentException("a top-up is not an escrow movement");
         };
+
         return prefix + orderNumber;
     }
 
@@ -653,14 +819,21 @@ public class EscrowService {
         if (record.requestFingerprint().equals(fingerprint)) {
             return;
         }
-        LOG.error("escrow idempotency CONFLICT: key {} was first used for {} on order {} with "
-                + "fingerprint {} at {}, and has now arrived with fingerprint {}; refusing and "
-                + "applying nothing",
-            record.idempotencyKey(), record.operation(), record.orderNumber(),
-            record.requestFingerprint(), record.createdAt(), fingerprint
+
+        LOG.error(
+            "escrow idempotency CONFLICT: key {} was first used for {} on order {} with "
+                    + "fingerprint {} at {}, and has now arrived with fingerprint {}; refusing and "
+                    + "applying nothing",
+            record.idempotencyKey(),
+            record.operation(),
+            record.orderNumber(),
+            record.requestFingerprint(),
+            record.createdAt(),
+            fingerprint
         );
-        throw new IdempotencyConflictException("idempotency key " + record.idempotencyKey()
-            + " was already used for a different " + record.operation() + " request"
+        throw new IdempotencyConflictException(
+            "idempotency key " + record.idempotencyKey()
+                + " was already used for a different " + record.operation() + " request"
         );
     }
 
@@ -668,8 +841,10 @@ public class EscrowService {
         if (hold.status() == EscrowHold.EscrowStatus.HELD) {
             return;
         }
-        throw new DomainException("escrow for order " + hold.orderNumber() + " is "
-            + hold.status() + " and cannot be " + verb
+
+        throw new DomainException(
+            "escrow for order " + hold.orderNumber() + " is "
+                + hold.status() + " and cannot be " + verb
         );
     }
 
@@ -690,9 +865,11 @@ public class EscrowService {
     private SuspenseWallet unassignedDriverFees() {
         return suspenseWalletRepository
             .findByPurposeForUpdate(SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE)
-            .orElseGet(() -> SuspenseWallet.createInitial(
-                SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE
-            ));
+            .orElseGet(
+                () -> SuspenseWallet.createInitial(
+                    SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE
+                )
+            );
     }
 
     private void lockWalletOwners(String... principalIds) {
@@ -707,23 +884,31 @@ public class EscrowService {
         if (supplied == null || supplied.isBlank()) {
             return "order:" + orderNumber;
         }
+
         if (supplied.length() > MAX_CALLER_KEY_LENGTH) {
             throw new IllegalArgumentException(
                 "an idempotency key may be at most " + MAX_CALLER_KEY_LENGTH + " characters"
             );
         }
+
         return supplied;
     }
 
     private static IdempotencyKeySource sourceOf(
-        String supplied, EscrowOperation operation, String orderNumber
+        String supplied,
+        EscrowOperation operation,
+        String orderNumber
     ) {
         if (supplied != null && !supplied.isBlank()) {
             return IdempotencyKeySource.CALLER;
         }
-        LOG.warn("escrow idempotency: {} arrived for order {} with no idempotency key; deduping on "
-            + "a key derived from the order number. The caller should send "
-            + "common.v1.IdempotencyKey.", operation, orderNumber
+
+        LOG.warn(
+            "escrow idempotency: {} arrived for order {} with no idempotency key; deduping on "
+                + "a key derived from the order number. The caller should send "
+                + "common.v1.IdempotencyKey.",
+            operation,
+            orderNumber
         );
         return IdempotencyKeySource.DERIVED;
     }
@@ -732,6 +917,7 @@ public class EscrowService {
         if (reason == null || reason.isBlank()) {
             return null;
         }
+
         return reason.length() <= MAX_DETAIL_LENGTH ? reason : reason.substring(0, MAX_DETAIL_LENGTH);
     }
 }

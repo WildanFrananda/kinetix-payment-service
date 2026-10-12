@@ -53,8 +53,10 @@ class MetricsExpositionTest {
 
         String exposition = scrape();
 
-        assertTrue(exposition.contains("\n# HELP ") || exposition.startsWith("# HELP "),
-            "not Prometheus text exposition:\n" + exposition);
+        assertTrue(
+            exposition.contains("\n# HELP ") || exposition.startsWith("# HELP "),
+            "not Prometheus text exposition:\n" + exposition
+        );
 
         for (String required : new String[] {
             "kinetix_http_requests_total{",
@@ -63,8 +65,10 @@ class MetricsExpositionTest {
             "kinetix_http_request_duration_seconds_count{",
             "kinetix_build_info{"
         }) {
-            assertTrue(exposition.contains(required),
-                required + " is missing from:\n" + exposition);
+            assertTrue(
+                exposition.contains(required),
+                required + " is missing from:\n" + exposition
+            );
         }
     }
 
@@ -82,7 +86,8 @@ class MetricsExpositionTest {
 
         String exposition = scrape();
 
-        assertFalse(exposition.contains("/nothing/is/mapped/here"),
+        assertFalse(
+            exposition.contains("/nothing/is/mapped/here"),
             "an unmatched path became its own series:\n" + exposition
         );
         assertTrue(exposition.contains("route=\"UNKNOWN\""), exposition);

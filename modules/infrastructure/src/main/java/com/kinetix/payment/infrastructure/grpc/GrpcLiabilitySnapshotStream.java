@@ -41,12 +41,14 @@ final class GrpcLiabilitySnapshotStream implements LiabilitySnapshotSink {
 
     @Override
     public void begin(Instant asOf, String currency) {
-        send(Liability.StreamLiabilitySnapshotResponse.newBuilder()
-            .setHeader(Liability.LiabilitySnapshotHeader.newBuilder()
-                .setAsOf(timestamp(asOf))
-                .setCurrency(currency)
-            )
-            .build()
+        send(
+            Liability.StreamLiabilitySnapshotResponse.newBuilder()
+                .setHeader(
+                    Liability.LiabilitySnapshotHeader.newBuilder()
+                        .setAsOf(timestamp(asOf))
+                        .setCurrency(currency)
+                )
+                .build()
         );
     }
 
@@ -60,6 +62,7 @@ final class GrpcLiabilitySnapshotStream implements LiabilitySnapshotSink {
         } else {
             wire.setSuspensePurpose(account.holder());
         }
+
         batch.addAccounts(wire);
         if (batch.getAccountsCount() >= BATCH_SIZE) {
             flush();
@@ -69,12 +72,14 @@ final class GrpcLiabilitySnapshotStream implements LiabilitySnapshotSink {
     @Override
     public void end(LiabilitySnapshotTotals totals) {
         flush();
-        send(Liability.StreamLiabilitySnapshotResponse.newBuilder()
-            .setTrailer(Liability.LiabilitySnapshotTrailer.newBuilder()
-                .setAccountCount(totals.accountCount())
-                .setTotal(money(totals.total(), totals.currency()))
-            )
-            .build()
+        send(
+            Liability.StreamLiabilitySnapshotResponse.newBuilder()
+                .setTrailer(
+                    Liability.LiabilitySnapshotTrailer.newBuilder()
+                        .setAccountCount(totals.accountCount())
+                        .setTotal(money(totals.total(), totals.currency()))
+                )
+                .build()
         );
     }
 
@@ -82,6 +87,7 @@ final class GrpcLiabilitySnapshotStream implements LiabilitySnapshotSink {
         if (batch.getAccountsCount() == 0) {
             return;
         }
+
         send(Liability.StreamLiabilitySnapshotResponse.newBuilder().setAccounts(batch).build());
         batch = Liability.LiabilityAccountBatch.newBuilder();
     }
@@ -100,11 +106,13 @@ final class GrpcLiabilitySnapshotStream implements LiabilitySnapshotSink {
                     .withDescription("the caller hung up before the liability snapshot was delivered")
                     .asRuntimeException();
             }
+
             if (System.nanoTime() - started > stallLimit.toNanos()) {
                 throw Status.DEADLINE_EXCEEDED
                     .withDescription("the caller read nothing for " + stallLimit + ", so the snapshot was abandoned")
                     .asRuntimeException();
             }
+
             LockSupport.parkNanos(pause);
             pause = Math.min(pause * 2, LONGEST_PAUSE_NANOS);
         }

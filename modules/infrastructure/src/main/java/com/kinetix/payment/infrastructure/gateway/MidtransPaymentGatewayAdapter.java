@@ -53,9 +53,11 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
         if (serverKey == null || serverKey.isBlank()) {
             throw new IllegalStateException("midtrans.server-key is required");
         }
+
         if (baseUrl == null || baseUrl.isBlank()) {
             throw new IllegalStateException("midtrans.base-url is required");
         }
+
         this.serverKey = serverKey;
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.authorization = "Basic " + Base64.getEncoder()
@@ -86,17 +88,22 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
                 HttpResponse.BodyHandlers.ofString()
             );
         } catch (HttpTimeoutException timeout) {
-            return unknownCharge(null, "Midtrans did not answer within " + requestTimeout.toMillis()
-                + "ms; the charge may exist"
+            return unknownCharge(
+                null,
+                "Midtrans did not answer within " + requestTimeout.toMillis()
+                    + "ms; the charge may exist"
             );
         } catch (IOException unreachable) {
-            return unknownCharge(null, "Midtrans could not be reached ("
-                + unreachable.getClass().getSimpleName() + "); the charge may exist"
+            return unknownCharge(
+                null,
+                "Midtrans could not be reached ("
+                    + unreachable.getClass().getSimpleName() + "); the charge may exist"
             );
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             return unknownCharge(null, "interrupted while waiting for Midtrans; the charge may exist");
         }
+
         return classifyCharge(request, response);
     }
 
@@ -111,17 +118,22 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
                 HttpResponse.BodyHandlers.ofString()
             );
         } catch (HttpTimeoutException timeout) {
-            return unknownStatus(null, "Midtrans did not answer a status query within "
-                + requestTimeout.toMillis() + "ms"
+            return unknownStatus(
+                null,
+                "Midtrans did not answer a status query within "
+                    + requestTimeout.toMillis() + "ms"
             );
         } catch (IOException unreachable) {
-            return unknownStatus(null, "Midtrans could not be reached for a status query ("
-                + unreachable.getClass().getSimpleName() + ")"
+            return unknownStatus(
+                null,
+                "Midtrans could not be reached for a status query ("
+                    + unreachable.getClass().getSimpleName() + ")"
             );
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             return unknownStatus(null, "interrupted while asking Midtrans for a status");
         }
+
         return classifyStatus(response);
     }
 
@@ -141,8 +153,12 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
         ) {
             return false;
         }
+
         String expected = MidtransSignature.of(
-            notification.orderId(), notification.statusCode(), notification.grossAmount(), serverKey
+            notification.orderId(),
+            notification.statusCode(),
+            notification.grossAmount(),
+            serverKey
         );
         return MessageDigest.isEqual(
             expected.getBytes(StandardCharsets.US_ASCII),
@@ -154,12 +170,14 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
         if (transactionStatus == null) {
             return GatewaySettlement.UNKNOWN;
         }
+
         String fraud = fraudStatus == null ? null : fraudStatus.toLowerCase(Locale.ROOT);
         return switch (transactionStatus.toLowerCase(Locale.ROOT)) {
             case "settlement", "capture" -> {
                 if (fraud == null || fraud.equals("accept")) {
                     yield GatewaySettlement.SETTLED;
                 }
+
                 yield fraud.equals("deny") ? GatewaySettlement.FAILED : GatewaySettlement.PENDING;
             }
             case "pending", "authorize" -> GatewaySettlement.PENDING;
@@ -176,6 +194,7 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
                 if (request.bank() == null) {
                     throw new IllegalArgumentException("a virtual-account charge needs a bank");
                 }
+
                 if (request.bank() == VirtualAccountBank.PERMATA) {
                     body.put("payment_type", "permata");
                 } else {
@@ -191,10 +210,16 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
                 "Midtrans charges virtual accounts and QRIS here, not " + request.method()
             );
         }
-        body.put("transaction_details", Map.of(
-            "order_id", request.referenceNumber(),
-            "gross_amount", request.grossAmountRupiah()
-        ));
+
+        body.put(
+            "transaction_details",
+            Map.of(
+                "order_id",
+                request.referenceNumber(),
+                "gross_amount",
+                request.grossAmountRupiah()
+            )
+        );
         return body;
     }
 
@@ -208,28 +233,48 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
 
         int code = statusCodeOf(json, http);
         if (http >= 500 || code >= 500) {
-            return unknownCharge(body, "Midtrans reported a server error (HTTP " + http + ", status_code " + code + ")");
-        }
-        if (code == 406) {
-            return unknownCharge(body, "Midtrans already holds an order " + request.referenceNumber()
-                + " (406), and this answer does not say what became of it"
+            return unknownCharge(
+                body,
+                "Midtrans reported a server error (HTTP " + http + ", status_code " + code + ")"
             );
         }
+
+        if (code == 406) {
+            return unknownCharge(
+                body,
+                "Midtrans already holds an order " + request.referenceNumber()
+                    + " (406), and this answer does not say what became of it"
+            );
+        }
+
         if (isSuccess(http) && isSuccess(code)) {
             if (text(json, "transaction_status") == null) {
                 return unknownCharge(body, "Midtrans accepted the request but named no transaction status");
             }
+
             return new GatewayCharge(
-                GatewayChargeOutcome.ACCEPTED, text(json, "transaction_id"), instructionsOf(json), body, null
+                GatewayChargeOutcome.ACCEPTED,
+                text(json, "transaction_id"),
+                instructionsOf(json),
+                body,
+                null
             );
         }
+
         if (code >= 400 && code < 500) {
-            return new GatewayCharge(GatewayChargeOutcome.REFUSED, null, PaymentInstructions.none(), body,
+            return new GatewayCharge(
+                GatewayChargeOutcome.REFUSED,
+                null,
+                PaymentInstructions.none(),
+                body,
                 "Midtrans refused the charge with status_code " + code + ": " + text(json, "status_message")
             );
         }
-        return unknownCharge(body, "Midtrans answered HTTP " + http + " with status_code " + code
-            + ", which is neither a created transaction nor a refusal"
+
+        return unknownCharge(
+            body,
+            "Midtrans answered HTTP " + http + " with status_code " + code
+                + ", which is neither a created transaction nor a refusal"
         );
     }
 
@@ -243,20 +288,28 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
 
         int code = statusCodeOf(json, http);
         if (code == 404) {
-            return new GatewayStatus(GatewaySettlement.NOT_FOUND, null, null, body,
+            return new GatewayStatus(
+                GatewaySettlement.NOT_FOUND,
+                null,
+                null,
+                body,
                 "Midtrans has no transaction under this order id"
             );
         }
+
         if (http >= 500 || code >= 500) {
             return unknownStatus(body, "Midtrans reported a server error to a status query (HTTP " + http + ")");
         }
 
         String transactionStatus = text(json, "transaction_status");
         if (transactionStatus == null) {
-            return unknownStatus(body, "Midtrans answered a status query with HTTP " + http + " and status_code "
-                + code + " but no transaction status"
+            return unknownStatus(
+                body,
+                "Midtrans answered a status query with HTTP " + http + " and status_code "
+                    + code + " but no transaction status"
             );
         }
+
         GatewaySettlement settlement = settlementOf(transactionStatus, text(json, "fraud_status"));
         return new GatewayStatus(
             settlement,
@@ -291,6 +344,7 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
                 }
             }
         }
+
         return PaymentInstructions.none();
     }
 
@@ -305,6 +359,7 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
         if (body == null || body.isBlank()) {
             return null;
         }
+
         try {
             JsonNode json = objectMapper.readTree(body);
             return json != null && json.isObject() ? json : null;
@@ -318,6 +373,7 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
         if (declared == null) {
             return http;
         }
+
         try {
             return Integer.parseInt(declared.trim());
         } catch (NumberFormatException unreadable) {
@@ -335,6 +391,7 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
         if (value == null) {
             return null;
         }
+
         try {
             return new BigDecimal(value.trim());
         } catch (NumberFormatException unreadable) {
@@ -346,6 +403,7 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
         if (code == null) {
             return null;
         }
+
         try {
             return VirtualAccountBank.valueOf(code.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException unrecognised) {

@@ -46,7 +46,9 @@ public class GrpcServerMetricsInterceptor implements ServerInterceptor {
 
     @Override
     public <ReqT, RespT> Listener<ReqT> interceptCall(
-        ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next
+        ServerCall<ReqT, RespT> call,
+        Metadata headers,
+        ServerCallHandler<ReqT, RespT> next
     ) {
         String method = call.getMethodDescriptor().getFullMethodName();
         AtomicBoolean counted = new AtomicBoolean(false);
@@ -72,6 +74,7 @@ public class GrpcServerMetricsInterceptor implements ServerInterceptor {
         if (!counted.compareAndSet(false, true)) {
             return;
         }
+
         counter(method, code).increment();
     }
 

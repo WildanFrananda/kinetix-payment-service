@@ -57,11 +57,17 @@ public class LiabilityGrpcServerService extends LiabilityServiceGrpc.LiabilitySe
                 LOG.info("liability snapshot abandoned: the caller hung up");
                 return;
             }
+
             call.onError(toStatusException(failure));
             return;
         }
-        LOG.info("liability snapshot as of {} delivered: {} accounts owed {} {}",
-            totals.asOf(), totals.accountCount(), totals.total().toPlainString(), totals.currency()
+
+        LOG.info(
+            "liability snapshot as of {} delivered: {} accounts owed {} {}",
+            totals.asOf(),
+            totals.accountCount(),
+            totals.total().toPlainString(),
+            totals.currency()
         );
         call.onCompleted();
     }
@@ -71,13 +77,16 @@ public class LiabilityGrpcServerService extends LiabilityServiceGrpc.LiabilitySe
             LOG.warn("liability snapshot abandoned: {}", status.getStatus().getDescription());
             return status;
         }
+
         if (failure instanceof IllegalArgumentException invalid) {
             return GrpcRefusal.of(Status.INVALID_ARGUMENT, "INVALID_ARGUMENT", invalid);
         }
+
         if (failure instanceof LiabilitySnapshotRefusedException refused) {
             LOG.error("liability snapshot refused: {}", refused.getMessage());
             return GrpcRefusal.of(Status.FAILED_PRECONDITION, "LIABILITY_SNAPSHOT_REFUSED", refused);
         }
+
         if (failure instanceof DataAccessException
             || failure instanceof TransactionException
             || failure instanceof PersistenceException
@@ -85,6 +94,7 @@ public class LiabilityGrpcServerService extends LiabilityServiceGrpc.LiabilitySe
             LOG.warn("liability snapshot could not read the ledger", failure);
             return GrpcRefusal.of(Status.UNAVAILABLE, "LIABILITY_SNAPSHOT_UNAVAILABLE", failure);
         }
+
         LOG.error("liability snapshot failed", failure);
         return Status.INTERNAL
             .withDescription("the liability snapshot could not be completed")

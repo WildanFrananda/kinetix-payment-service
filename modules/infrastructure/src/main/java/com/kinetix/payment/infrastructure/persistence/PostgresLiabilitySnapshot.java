@@ -28,21 +28,31 @@ public class PostgresLiabilitySnapshot implements LiabilitySnapshotPort {
     private static final String STATEMENT_TIMEOUT = "SET LOCAL statement_timeout = '120s'";
     private static final String STALL_TIMEOUT = "SET LOCAL idle_in_transaction_session_timeout = '60s'";
     private static final String SNAPSHOT_FACTS = "SELECT clock_timestamp(), "
-        + "current_setting('transaction_isolation'), current_setting('transaction_read_only')";
+        + "current_setting('transaction_isolation'), "
+        + "current_setting('transaction_read_only')";
+
     private static final String CUSTOMERS = "SELECT id, customer_principal_id, balance, held_balance, currency, "
-        + "created_at, updated_at FROM customer_wallets WHERE currency = ? ORDER BY id";
+        + "created_at, updated_at "
+        + "FROM customer_wallets WHERE currency = ? ORDER BY id";
+
     private static final String MERCHANTS = "SELECT id, merchant_principal_id, available_balance, "
-        + "pending_escrow_balance, currency, created_at, updated_at FROM merchant_wallets WHERE currency = ? ORDER BY id";
+        + "pending_escrow_balance, currency, created_at, updated_at "
+        + "FROM merchant_wallets WHERE currency = ? ORDER BY id";
+
     private static final String DRIVERS = "SELECT id, driver_principal_id, available_balance, "
-        + "pending_escrow_balance, currency, created_at, updated_at FROM driver_wallets WHERE currency = ? ORDER BY id";
+        + "pending_escrow_balance, currency, created_at, updated_at "
+        + "FROM driver_wallets WHERE currency = ? ORDER BY id";
+
     private static final String SUSPENSE = "SELECT id, purpose, available_balance, "
-        + "pending_escrow_balance, currency, created_at, updated_at FROM suspense_wallets WHERE currency = ? ORDER BY id";
+        + "pending_escrow_balance, currency, created_at, updated_at "
+        + "FROM suspense_wallets WHERE currency = ? ORDER BY id";
 
     private final TransactionTemplate template;
     private final EntityManagerFactory entityManagerFactory;
 
     public PostgresLiabilitySnapshot(
-        PlatformTransactionManager transactionManager, EntityManagerFactory entityManagerFactory
+        PlatformTransactionManager transactionManager,
+        EntityManagerFactory entityManagerFactory
     ) {
         this.template = new TransactionTemplate(transactionManager);
         this.template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -86,6 +96,7 @@ public class PostgresLiabilitySnapshot implements LiabilitySnapshotPort {
                         + " with read_only " + readOnly
                 );
             }
+
             return facts.getObject(1, OffsetDateTime.class).toInstant();
         }
     }

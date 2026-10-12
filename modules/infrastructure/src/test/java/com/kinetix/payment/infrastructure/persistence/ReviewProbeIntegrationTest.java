@@ -68,15 +68,26 @@ class ReviewProbeIntegrationTest {
     @Autowired private EscrowIdempotencyAdapter idempotencyRepository;
 
     private EscrowService escrow() {
-        return new EscrowService(escrowRepository, customerWalletRepository, merchantWalletRepository,
-            driverWalletRepository, suspenseWalletRepository, paymentTransactionRepository,
-            idempotencyRepository, transactionRunner, advisoryLock
+        return new EscrowService(
+            escrowRepository,
+            customerWalletRepository,
+            merchantWalletRepository,
+            driverWalletRepository,
+            suspenseWalletRepository,
+            paymentTransactionRepository,
+            idempotencyRepository,
+            transactionRunner,
+            advisoryLock
         );
     }
 
     private WalletService wallets() {
-        return new WalletService(customerWalletRepository, merchantWalletRepository,
-            driverWalletRepository, transactionRunner, advisoryLock
+        return new WalletService(
+            customerWalletRepository,
+            merchantWalletRepository,
+            driverWalletRepository,
+            transactionRunner,
+            advisoryLock
         );
     }
 
@@ -105,16 +116,29 @@ class ReviewProbeIntegrationTest {
                 return false;
             }
         };
-        return new TopUpService(paymentTransactionRepository, customerWalletRepository, paidInFull,
-            transactionRunner, advisoryLock
+
+        return new TopUpService(
+            paymentTransactionRepository,
+            customerWalletRepository,
+            paidInFull,
+            transactionRunner,
+            advisoryLock
         );
     }
 
     private String pendingTopUp(String principalId, BigDecimal amount) {
         String reference = "TOPUP-PROBE-" + UUID.randomUUID();
-        transactionRunner.inNewTransaction(() -> paymentTransactionRepository.save(PaymentTransaction.pendingTopUp(
-            reference, principalId, "probe:" + UUID.randomUUID(), PaymentTransaction.PaymentMethod.MIDTRANS_VA, amount
-        )));
+        transactionRunner.inNewTransaction(
+            () -> paymentTransactionRepository.save(
+                PaymentTransaction.pendingTopUp(
+                    reference,
+                    principalId,
+                    "probe:" + UUID.randomUUID(),
+                    PaymentTransaction.PaymentMethod.MIDTRANS_VA,
+                    amount
+                )
+            )
+        );
         return reference;
     }
 
@@ -134,18 +158,27 @@ class ReviewProbeIntegrationTest {
         List<String> violations = race(noop, 120, "WITHOUT the advisory lock");
         System.out.println("### control: " + violations.size() + " violations without the lock");
         violations.stream().distinct().limit(5).forEach(v -> System.out.println("###   " + v));
-        assertTrue(!violations.isEmpty(),
+        assertTrue(
+            !violations.isEmpty(),
             "the control found no violation either, so this probe cannot detect the defect"
         );
     }
 
     private List<String> race(
-        AdvisoryLockPort lock, int rounds, String label
+        AdvisoryLockPort lock,
+        int rounds,
+        String label
     ) throws Exception {
         EscrowService escrow = new EscrowService(
-            escrowRepository, customerWalletRepository,
-            merchantWalletRepository, driverWalletRepository, suspenseWalletRepository,
-            paymentTransactionRepository, idempotencyRepository, transactionRunner, lock
+            escrowRepository,
+            customerWalletRepository,
+            merchantWalletRepository,
+            driverWalletRepository,
+            suspenseWalletRepository,
+            paymentTransactionRepository,
+            idempotencyRepository,
+            transactionRunner,
+            lock
         );
         List<String> violations = new CopyOnWriteArrayList<>();
         List<String> shapes = new CopyOnWriteArrayList<>();
@@ -162,18 +195,33 @@ class ReviewProbeIntegrationTest {
                 Future<String> creating = pool.submit(() -> {
                     gate.await(10, TimeUnit.SECONDS);
                     try {
-                        escrow.createEscrowHold(new CreateEscrowHoldCommand(order, customer, merchant,
-                            null, TOTAL, MERCHANT_AMOUNT, SHIPPING, "k-create-" + order,
-                            EscrowRequestFingerprint.forCreateHold(
-                                order, customer, merchant, null,
-                                TOTAL, MERCHANT_AMOUNT, SHIPPING
+                        escrow.createEscrowHold(
+                            new CreateEscrowHoldCommand(
+                                order,
+                                customer,
+                                merchant,
+                                null,
+                                TOTAL,
+                                MERCHANT_AMOUNT,
+                                SHIPPING,
+                                "k-create-" + order,
+                                EscrowRequestFingerprint.forCreateHold(
+                                    order,
+                                    customer,
+                                    merchant,
+                                    null,
+                                    TOTAL,
+                                    MERCHANT_AMOUNT,
+                                    SHIPPING
+                                )
                             )
-                        ));
+                        );
                         return "create:ok";
                     } catch (RuntimeException failure) {
                         return "create:" + failure.getClass().getSimpleName();
                     }
                 });
+
                 Future<String> refunding = pool.submit(() -> {
                     gate.await(10, TimeUnit.SECONDS);
                     try {
@@ -183,31 +231,38 @@ class ReviewProbeIntegrationTest {
                         return "refund:" + failure.getClass().getSimpleName();
                     }
                 });
+
                 String outcome = creating.get(30, TimeUnit.SECONDS) + " / "
                     + refunding.get(30, TimeUnit.SECONDS);
 
                 BigDecimal balance = balanceOf(customer);
                 Optional<EscrowHold> hold = escrowRepository.findByOrderNumber(order);
                 boolean refundRecorded = idempotencyRepository.existsFor(EscrowOperation.REFUND, order);
-                shapes.add(outcome + " | hold=" + hold.map(h -> h.status().name()).orElse("none")
-                    + " | refundRow=" + refundRecorded + " | balance=" + balance.toPlainString()
+                shapes.add(
+                    outcome + " | hold=" + hold.map(h -> h.status().name()).orElse("none")
+                        + " | refundRow=" + refundRecorded + " | balance=" + balance.toPlainString()
                 );
 
                 if (hold.isEmpty() && balance.compareTo(START) != 0) {
-                    violations.add("STRANDED DEBIT: no hold row but balance is " + balance
-                        + " on order " + order
+                    violations.add(
+                        "STRANDED DEBIT: no hold row but balance is " + balance
+                            + " on order " + order
                     );
                 }
+
                 if (hold.isPresent() && hold.get().status() == EscrowHold.EscrowStatus.HELD
                     && refundRecorded) {
-                    violations.add("HELD AND REFUNDED: order " + order
-                        + " has a live hold and a committed REFUND record"
+                    violations.add(
+                        "HELD AND REFUNDED: order " + order
+                            + " has a live hold and a committed REFUND record"
                     );
                 }
+
                 if (hold.isPresent() && hold.get().status() == EscrowHold.EscrowStatus.REFUNDED
                     && balance.compareTo(START) != 0) {
                     violations.add("REFUNDED BUT NOT CREDITED: order " + order + " balance " + balance);
                 }
+
                 if (hold.isPresent() && hold.get().status() == EscrowHold.EscrowStatus.HELD
                     && balance.compareTo(START.subtract(TOTAL)) != 0) {
                     violations.add("HELD BUT BALANCE WRONG: order " + order + " balance " + balance);
@@ -237,6 +292,7 @@ class ReviewProbeIntegrationTest {
         for (int i = 0; i < topUps; i++) {
             pendingTopUps.add(pendingTopUp(customer, each));
         }
+
         CyclicBarrier gate = new CyclicBarrier(topUps + 1);
         ExecutorService pool = Executors.newFixedThreadPool(topUps + 1);
         List<Future<?>> running = new ArrayList<>();
@@ -248,17 +304,36 @@ class ReviewProbeIntegrationTest {
                     return settlements.settle(reference);
                 }));
             }
+
             Future<?> debit = pool.submit(() -> {
                 gate.await(10, TimeUnit.SECONDS);
-                return escrow.createEscrowHold(new CreateEscrowHoldCommand(order, customer, merchant,
-                    null, TOTAL, MERCHANT_AMOUNT, SHIPPING, "k-" + order,
-                    EscrowRequestFingerprint.forCreateHold(order, customer, merchant, null,
-                        TOTAL, MERCHANT_AMOUNT, SHIPPING)
-                ));
+                return escrow.createEscrowHold(
+                    new CreateEscrowHoldCommand(
+                        order,
+                        customer,
+                        merchant,
+                        null,
+                        TOTAL,
+                        MERCHANT_AMOUNT,
+                        SHIPPING,
+                        "k-" + order,
+                        EscrowRequestFingerprint.forCreateHold(
+                            order,
+                            customer,
+                            merchant,
+                            null,
+                            TOTAL,
+                            MERCHANT_AMOUNT,
+                            SHIPPING
+                        )
+                    )
+                );
             });
+
             for (Future<?> f : running) {
                 f.get(30, TimeUnit.SECONDS);
             }
+
             debit.get(30, TimeUnit.SECONDS);
         } finally {
             pool.shutdownNow();
@@ -266,10 +341,13 @@ class ReviewProbeIntegrationTest {
 
         BigDecimal expected = START.add(each.multiply(new BigDecimal(topUps))).subtract(TOTAL);
         BigDecimal actual = balanceOf(customer);
-        System.out.println("### top-up vs debit: expected " + expected.toPlainString()
-            + " actual " + actual.toPlainString()
+        System.out.println(
+            "### top-up vs debit: expected " + expected.toPlainString()
+                + " actual " + actual.toPlainString()
         );
-        assertEquals(0, expected.compareTo(actual),
+        assertEquals(
+            0,
+            expected.compareTo(actual),
             "expected " + expected + " but the wallet holds " + actual
                 + "; a lost update ate " + expected.subtract(actual)
         );
@@ -308,21 +386,51 @@ class ReviewProbeIntegrationTest {
                         try {
                             switch (n % 4) {
                                 case 0 -> {
-                                    escrow.createEscrowHold(new CreateEscrowHoldCommand(order, c, m, d,
-                                        TOTAL, MERCHANT_AMOUNT, SHIPPING, "k-" + order,
-                                        EscrowRequestFingerprint.forCreateHold(order, c, m, d,
-                                            TOTAL, MERCHANT_AMOUNT, SHIPPING
+                                    escrow.createEscrowHold(
+                                        new CreateEscrowHoldCommand(
+                                            order,
+                                            c,
+                                            m,
+                                            d,
+                                            TOTAL,
+                                            MERCHANT_AMOUNT,
+                                            SHIPPING,
+                                            "k-" + order,
+                                            EscrowRequestFingerprint.forCreateHold(
+                                                order,
+                                                c,
+                                                m,
+                                                d,
+                                                TOTAL,
+                                                MERCHANT_AMOUNT,
+                                                SHIPPING
+                                            )
                                         )
-                                    ));
+                                    );
                                     escrow.releaseEscrow(order, "r-" + order);
                                 }
                                 case 1 -> {
-                                    escrow.createEscrowHold(new CreateEscrowHoldCommand(order, c, m, d,
-                                        TOTAL, MERCHANT_AMOUNT, SHIPPING, "k-" + order,
-                                        EscrowRequestFingerprint.forCreateHold(order, c, m, d,
-                                            TOTAL, MERCHANT_AMOUNT, SHIPPING
+                                    escrow.createEscrowHold(
+                                        new CreateEscrowHoldCommand(
+                                            order,
+                                            c,
+                                            m,
+                                            d,
+                                            TOTAL,
+                                            MERCHANT_AMOUNT,
+                                            SHIPPING,
+                                            "k-" + order,
+                                            EscrowRequestFingerprint.forCreateHold(
+                                                order,
+                                                c,
+                                                m,
+                                                d,
+                                                TOTAL,
+                                                MERCHANT_AMOUNT,
+                                                SHIPPING
+                                            )
                                         )
-                                    ));
+                                    );
                                     escrow.refundEscrow(order, "cancel", "f-" + order);
                                 }
                                 case 2 -> settlements.settle(pendingTopUp(c, new BigDecimal("500.00")));
@@ -340,17 +448,21 @@ class ReviewProbeIntegrationTest {
                             }
                         }
                     }
+
                     return null;
                 }));
             }
+
             for (Future<?> f : running) {
                 f.get(120, TimeUnit.SECONDS);
             }
         } finally {
             pool.shutdownNow();
         }
-        System.out.println("### mixed traffic: deadlocks=" + deadlocks.size()
-            + " otherFailures=" + other.size() + " " + other.stream().distinct().toList()
+
+        System.out.println(
+            "### mixed traffic: deadlocks=" + deadlocks.size()
+                + " otherFailures=" + other.size() + " " + other.stream().distinct().toList()
         );
         assertTrue(deadlocks.isEmpty(), String.join("\n", deadlocks));
     }
@@ -376,17 +488,33 @@ class ReviewProbeIntegrationTest {
                     gate.await(10, TimeUnit.SECONDS);
 
                     try {
-                        escrow.createEscrowHold(new CreateEscrowHoldCommand(order, customer, merchant,
-                            null, TOTAL, MERCHANT_AMOUNT, SHIPPING, "k-" + order,
-                            EscrowRequestFingerprint.forCreateHold(order, customer, merchant, null,
-                                TOTAL, MERCHANT_AMOUNT, SHIPPING
+                        escrow.createEscrowHold(
+                            new CreateEscrowHoldCommand(
+                                order,
+                                customer,
+                                merchant,
+                                null,
+                                TOTAL,
+                                MERCHANT_AMOUNT,
+                                SHIPPING,
+                                "k-" + order,
+                                EscrowRequestFingerprint.forCreateHold(
+                                    order,
+                                    customer,
+                                    merchant,
+                                    null,
+                                    TOTAL,
+                                    MERCHANT_AMOUNT,
+                                    SHIPPING
+                                )
                             )
-                        ));
+                        );
                         return "checkout:ok";
                     } catch (RuntimeException failure) {
                         return "checkout:" + failure.getClass().getSimpleName();
                     }
                 });
+
                 List<Future<String>> reading = new ArrayList<>();
                 for (int r = 0; r < readers; r++) {
                     reading.add(pool.submit(() -> {
@@ -400,10 +528,12 @@ class ReviewProbeIntegrationTest {
                         }
                     }));
                 }
+
                 StringBuilder outcome = new StringBuilder(checkout.get(30, TimeUnit.SECONDS));
                 for (Future<String> f : reading) {
                     outcome.append(" / ").append(f.get(30, TimeUnit.SECONDS));
                 }
+
                 if (outcome.toString().contains("Exception")) {
                     failures.add(outcome.toString());
                 }
@@ -411,8 +541,10 @@ class ReviewProbeIntegrationTest {
         } finally {
             pool.shutdownNow();
         }
-        System.out.println("### first-ever merchant wallet race over " + rounds + " rounds: "
-            + failures.size() + " non-clean outcomes " + failures.stream().distinct().toList()
+
+        System.out.println(
+            "### first-ever merchant wallet race over " + rounds + " rounds: "
+                + failures.size() + " non-clean outcomes " + failures.stream().distinct().toList()
         );
         assertTrue(failures.isEmpty(), String.join(", ", failures));
     }
@@ -441,18 +573,36 @@ class ReviewProbeIntegrationTest {
                     return customerWalletRepository.save(stale.topUp(each));
                 }));
             }
+
             Future<?> debit = pool.submit(() -> {
                 gate.await(10, TimeUnit.SECONDS);
-                return escrow.createEscrowHold(new CreateEscrowHoldCommand(order, customer, merchant,
-                    null, TOTAL, MERCHANT_AMOUNT, SHIPPING, "k-" + order,
-                    EscrowRequestFingerprint.forCreateHold(order, customer, merchant, null,
-                        TOTAL, MERCHANT_AMOUNT, SHIPPING
+                return escrow.createEscrowHold(
+                    new CreateEscrowHoldCommand(
+                        order,
+                        customer,
+                        merchant,
+                        null,
+                        TOTAL,
+                        MERCHANT_AMOUNT,
+                        SHIPPING,
+                        "k-" + order,
+                        EscrowRequestFingerprint.forCreateHold(
+                            order,
+                            customer,
+                            merchant,
+                            null,
+                            TOTAL,
+                            MERCHANT_AMOUNT,
+                            SHIPPING
+                        )
                     )
-                ));
+                );
             });
+
             for (Future<?> f : running) {
                 f.get(30, TimeUnit.SECONDS);
             }
+
             debit.get(30, TimeUnit.SECONDS);
         } finally {
             pool.shutdownNow();
@@ -460,10 +610,12 @@ class ReviewProbeIntegrationTest {
 
         BigDecimal expected = START.add(each.multiply(new BigDecimal(topUps))).subtract(TOTAL);
         BigDecimal actual = balanceOf(customer);
-        System.out.println("### CONTROL old unlocked top-up: expected " + expected.toPlainString()
-            + " actual " + actual.toPlainString() + " (lost " + expected.subtract(actual).toPlainString() + ")"
+        System.out.println(
+            "### CONTROL old unlocked top-up: expected " + expected.toPlainString()
+                + " actual " + actual.toPlainString() + " (lost " + expected.subtract(actual).toPlainString() + ")"
         );
-        assertTrue(expected.compareTo(actual) != 0,
+        assertTrue(
+            expected.compareTo(actual) != 0,
             "the control did not lose an update, so attack 2 proves nothing"
         );
     }
@@ -474,17 +626,21 @@ class ReviewProbeIntegrationTest {
                 && pg.getServerErrorMessage() != null) {
                 return pg.getServerErrorMessage().getConstraint() + "/" + pg.getSQLState();
             }
+
             if (cause.getCause() == cause) {
                 break;
             }
         }
+
         return "no-constraint";
     }
 
     private void seedCustomer(String principalId, BigDecimal balance) {
-        transactionRunner.inNewTransaction(() -> customerWalletRepository.save(
-            CustomerWallet.createInitial(principalId).topUp(balance)
-        ));
+        transactionRunner.inNewTransaction(
+            () -> customerWalletRepository.save(
+                CustomerWallet.createInitial(principalId).topUp(balance)
+            )
+        );
     }
 
     private BigDecimal balanceOf(String principalId) {
@@ -500,8 +656,10 @@ class ReviewProbeIntegrationTest {
             if (cause.getCause() == cause) {
                 break;
             }
+
             chain.append(" <- ");
         }
+
         return chain.toString();
     }
 

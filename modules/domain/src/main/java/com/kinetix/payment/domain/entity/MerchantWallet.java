@@ -17,9 +17,11 @@ public record MerchantWallet(
         if (merchantPrincipalId == null || merchantPrincipalId.isBlank()) {
             throw new IllegalArgumentException("A merchant principal id is required");
         }
+
         if (availableBalance.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("Available balance cannot be negative");
         }
+
         if (pendingEscrowBalance.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("Pending escrow balance cannot be negative");
         }

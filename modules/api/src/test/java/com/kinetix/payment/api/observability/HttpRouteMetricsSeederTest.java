@@ -77,7 +77,8 @@ class HttpRouteMetricsSeederTest {
             "kinetix_http_requests_total{method=\"POST\","
                 + "route=\"/api/v1/payment/wallet/customer/topup\",status=\"202\"} 0.0"
         }) {
-            assertTrue(exposition.contains(created),
+            assertTrue(
+                exposition.contains(created),
                 "missing: " + created + "\n" + exposition
             );
         }
@@ -86,7 +87,8 @@ class HttpRouteMetricsSeederTest {
             "route=\"/api/v1/payment/wallet/customer/topup\",status=\"200\"",
             "route=\"/api/v1/payment/wallet/customer/topup\",status=\"201\""
         }) {
-            assertFalse(exposition.contains(invented),
+            assertFalse(
+                exposition.contains(invented),
                 "a top-up that answers 202 would never move a series seeded as anything else:\n" + exposition
             );
         }
@@ -107,9 +109,12 @@ class HttpRouteMetricsSeederTest {
         GenericApplicationContext context = new GenericApplicationContext();
         for (Class<?> controller : controllers) {
             context.registerBean(
-                controller.getName(), controller, definition -> definition.setLazyInit(true)
+                controller.getName(),
+                controller,
+                definition -> definition.setLazyInit(true)
             );
         }
+
         context.refresh();
 
         RequestMappingHandlerMapping mapping = new RequestMappingHandlerMapping();
@@ -118,7 +123,10 @@ class HttpRouteMetricsSeederTest {
 
         new HttpRouteMetricsSeeder(registry, providerOf(mapping)).seedMappedRoutes(
             new ApplicationReadyEvent(
-                new SpringApplication(), new String[0], context, Duration.ZERO
+                new SpringApplication(),
+                new String[0],
+                context,
+                Duration.ZERO
             )
         );
 

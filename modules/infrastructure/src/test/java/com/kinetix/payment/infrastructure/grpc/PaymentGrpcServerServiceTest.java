@@ -38,10 +38,19 @@ class PaymentGrpcServerServiceTest {
 
     private static EscrowHold hold(Instant settledAt, String driver) {
         return new EscrowHold(
-            42L, ORDER, CUSTOMER, MERCHANT, driver,
-            new BigDecimal("150000.00"), new BigDecimal("130000.00"), new BigDecimal("20000.00"),
-            EscrowHold.EscrowStatus.HELD, Instant.now(),
-            null, settledAt, BigDecimal.ZERO
+            42L,
+            ORDER,
+            CUSTOMER,
+            MERCHANT,
+            driver,
+            new BigDecimal("150000.00"),
+            new BigDecimal("130000.00"),
+            new BigDecimal("20000.00"),
+            EscrowHold.EscrowStatus.HELD,
+            Instant.now(),
+            null,
+            settledAt,
+            BigDecimal.ZERO
         );
     }
 
@@ -124,7 +133,14 @@ class PaymentGrpcServerServiceTest {
 
         server.refundGoods(goodsRefund(4_000_000L, "IDR"), observer);
 
-        verify(escrowService).refundGoods(eq(ORDER), argThat(amount -> new BigDecimal("40000").compareTo(amount) == 0), eq("returned"), any());
+        verify(
+            escrowService
+        ).refundGoods(
+            eq(ORDER),
+            argThat(amount -> new BigDecimal("40000").compareTo(amount) == 0),
+            eq("returned"),
+            any()
+        );
         assertTrue(observer.completed);
         assertEquals(4_000_000L, observer.response.getGoodsRefundedAmount().getAmountMinor());
     }
@@ -134,7 +150,10 @@ class PaymentGrpcServerServiceTest {
         server.refundGoods(goodsRefund(4_000_000L, "USD"), observer);
 
         assertInstanceOf(StatusRuntimeException.class, observer.error);
-        assertEquals(io.grpc.Status.Code.INVALID_ARGUMENT, ((StatusRuntimeException) observer.error).getStatus().getCode());
+        assertEquals(
+            io.grpc.Status.Code.INVALID_ARGUMENT,
+            ((StatusRuntimeException) observer.error).getStatus().getCode()
+        );
         verifyNoInteractions(escrowService);
     }
 
@@ -142,7 +161,10 @@ class PaymentGrpcServerServiceTest {
     void aGoodsRefundThatNamesNoAmountIsRefusedRatherThanReadAsZero() {
         server.refundGoods(Payment.RefundGoodsRequest.newBuilder().setOrderNumber(ORDER).build(), observer);
 
-        assertEquals(io.grpc.Status.Code.INVALID_ARGUMENT, ((StatusRuntimeException) observer.error).getStatus().getCode());
+        assertEquals(
+            io.grpc.Status.Code.INVALID_ARGUMENT,
+            ((StatusRuntimeException) observer.error).getStatus().getCode()
+        );
         verifyNoInteractions(escrowService);
     }
 

@@ -41,17 +41,21 @@ public class PeerAuthorizationInterceptor implements ServerInterceptor {
                     + "server, or the gRPC surface is unreachable."
                 );
         }
+
         LOG.info("gRPC callers allowed on this server: {}", allowed.describe());
     }
 
     @Override
     public <ReqT, RespT> Listener<ReqT> interceptCall(
-        ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next
+        ServerCall<ReqT, RespT> call,
+        Metadata headers,
+        ServerCallHandler<ReqT, RespT> next
     ) {
         String requestId = requestIdOf(headers);
         if (requestId != null) {
             MDC.put(MDC_REQUEST_ID, requestId);
         }
+
         try {
             return authorize(call, headers, next, requestId);
         } finally {
@@ -60,29 +64,41 @@ public class PeerAuthorizationInterceptor implements ServerInterceptor {
     }
 
     private <ReqT, RespT> Listener<ReqT> authorize(
-        ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next,
+        ServerCall<ReqT, RespT> call,
+        Metadata headers,
+        ServerCallHandler<ReqT, RespT> next,
         String requestId
     ) {
         Optional<String> peer = peerService(call);
 
         if (peer.isEmpty()) {
-            LOG.warn("refused a gRPC call to {} from a peer with no SPIFFE identity",
+            LOG.warn(
+                "refused a gRPC call to {} from a peer with no SPIFFE identity",
                 call.getMethodDescriptor().getFullMethodName()
             );
-            call.close(Status.UNAUTHENTICATED.withDescription(
-                "a client certificate carrying a SPIFFE id is required"
-            ), new Metadata());
+            call.close(
+                Status.UNAUTHENTICATED.withDescription(
+                    "a client certificate carrying a SPIFFE id is required"
+                ),
+                new Metadata()
+            );
             return new Listener<>() {};
         }
 
         String service = peer.get();
         String called = call.getMethodDescriptor().getServiceName();
         if (!allowed.permits(service, called)) {
-            LOG.warn("refused a gRPC call to {} from {}, which may not reach {} on this server",
-                call.getMethodDescriptor().getFullMethodName(), service, called
+            LOG.warn(
+                "refused a gRPC call to {} from {}, which may not reach {} on this server",
+                call.getMethodDescriptor().getFullMethodName(),
+                service,
+                called
             );
-            call.close(Status.PERMISSION_DENIED.withDescription(
-                "service '" + service + "' may not call " + called), new Metadata()
+            call.close(
+                Status.PERMISSION_DENIED.withDescription(
+                    "service '" + service + "' may not call " + called
+                ),
+                new Metadata()
             );
             return new Listener<>() {};
         }
@@ -93,11 +109,13 @@ public class PeerAuthorizationInterceptor implements ServerInterceptor {
     }
 
     private <ReqT> Listener<ReqT> withRequestId(
-        Listener<ReqT> delegate, String requestId
+        Listener<ReqT> delegate,
+        String requestId
     ) {
         if (requestId == null) {
             return delegate;
         }
+
         return new ForwardingServerCallListener.SimpleForwardingServerCallListener<>(delegate) {
             @Override
             public void onMessage(ReqT message) {
@@ -137,6 +155,7 @@ public class PeerAuthorizationInterceptor implements ServerInterceptor {
         } catch (SSLPeerUnverifiedException unverified) {
             return Optional.empty();
         }
+
         if (chain.length == 0 || !(chain[0] instanceof X509Certificate leaf)) {
             return Optional.empty();
         }

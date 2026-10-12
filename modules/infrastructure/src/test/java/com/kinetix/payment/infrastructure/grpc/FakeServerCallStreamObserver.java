@@ -18,10 +18,12 @@ final class FakeServerCallStreamObserver<T> extends ServerCallStreamObserver<T> 
         if (neverReady) {
             return false;
         }
+
         if (notReadyPolls > 0) {
             notReadyPolls--;
             return false;
         }
+
         return true;
     }
 
