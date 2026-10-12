@@ -2,6 +2,7 @@ package com.kinetix.payment.api.config;
 
 import tools.jackson.databind.json.JsonMapper;
 import com.kinetix.payment.application.EscrowService;
+import com.kinetix.payment.application.LiabilitySnapshotService;
 import com.kinetix.payment.application.TopUpService;
 import com.kinetix.payment.application.WalletService;
 import com.kinetix.payment.domain.port.*;
@@ -55,6 +56,11 @@ public class BeanConfig {
             transactionRunner,
             advisoryLock
         );
+    }
+
+    @Bean
+    public LiabilitySnapshotService liabilitySnapshotService(LiabilitySnapshotPort liabilitySnapshots) {
+        return new LiabilitySnapshotService(liabilitySnapshots);
     }
 
     @Bean

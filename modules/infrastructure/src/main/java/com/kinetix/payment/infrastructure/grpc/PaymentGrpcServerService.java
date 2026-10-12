@@ -11,10 +11,8 @@ import com.kinetix.payment.domain.exception.EscrowNotFoundException;
 import com.kinetix.payment.domain.exception.IdempotencyConflictException;
 import com.kinetix.payment.domain.exception.InsufficientBalanceException;
 import common.v1.Common;
-import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
-import io.grpc.protobuf.ProtoUtils;
 import io.grpc.stub.StreamObserver;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -33,9 +31,6 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
     private static final Logger LOG = LoggerFactory.getLogger(PaymentGrpcServerService.class);
 
     private static final BigDecimal MINOR_PER_MAJOR = new BigDecimal("100");
-
-    private static final Metadata.Key<Common.ErrorDetail> ERROR_DETAIL =
-        ProtoUtils.keyForProto(Common.ErrorDetail.getDefaultInstance());
 
     private final EscrowService escrowService;
 
@@ -246,14 +241,7 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
     }
 
     private static StatusRuntimeException refusal(Status status, String errorCode, Throwable cause) {
-        String message = cause.getMessage() == null ? errorCode : cause.getMessage();
-        Metadata trailers = new Metadata();
-        trailers.put(ERROR_DETAIL, Common.ErrorDetail.newBuilder()
-            .setErrorCode(errorCode)
-            .setMessage(message)
-            .build()
-        );
-        return status.withDescription(message).asRuntimeException(trailers);
+        return GrpcRefusal.of(status, errorCode, cause);
     }
 
     private static BigDecimal goodsRefundOf(Payment.RefundGoodsRequest request) {
