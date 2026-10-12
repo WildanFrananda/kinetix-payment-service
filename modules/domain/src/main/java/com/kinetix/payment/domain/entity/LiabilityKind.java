@@ -1,0 +1,11 @@
+package com.kinetix.payment.domain.entity;
+
+public enum LiabilityKind {
+    CUSTOMER_BALANCE,
+    MERCHANT_AVAILABLE,
+    MERCHANT_PENDING_ESCROW,
+    DRIVER_AVAILABLE,
+    DRIVER_PENDING_ESCROW,
+    SUSPENSE_AVAILABLE,
+    SUSPENSE_PENDING_ESCROW
+}

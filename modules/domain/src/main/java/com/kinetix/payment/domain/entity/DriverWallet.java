@@ -2,6 +2,7 @@ package com.kinetix.payment.domain.entity;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 public record DriverWallet(
     Long id,
@@ -11,7 +12,7 @@ public record DriverWallet(
     String currency,
     Instant createdAt,
     Instant updatedAt
-) {
+) implements LiabilityHolder {
     public DriverWallet {
         if (driverPrincipalId == null || driverPrincipalId.isBlank()) {
             throw new IllegalArgumentException("A driver principal id is required");
@@ -84,6 +85,24 @@ public record DriverWallet(
             currency,
             createdAt,
             Instant.now()
+        );
+    }
+
+    @Override
+    public List<LiabilityAccount> liabilities() {
+        return List.of(
+            new LiabilityAccount(
+                LiabilityKind.DRIVER_AVAILABLE,
+                driverPrincipalId,
+                availableBalance,
+                currency
+            ),
+            new LiabilityAccount(
+                LiabilityKind.DRIVER_PENDING_ESCROW,
+                driverPrincipalId,
+                pendingEscrowBalance,
+                currency
+            )
         );
     }
 }

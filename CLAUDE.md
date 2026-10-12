@@ -40,6 +40,55 @@ clamping at zero. A clamp turned a bookkeeping error into money that silently st
 A shipping fee settled to a driver after a driverless release is credited straight to available
 (`DriverWallet.creditAvailable`), because that driver never had it pending.
 
+## The liability snapshot, for the notary
+
+`payment.v1.LiabilityService/StreamLiabilitySnapshot` (contracts `payment/v1/liability.proto`) streams
+everything payment owes in one currency, for `kinetix-notary-service` to commit to and anchor on chain.
+The notary never reads this database; this RPC is the whole interface. What it promises:
+
+- **What is owed, and nothing twice.** Every wallet row, every balance it holds: customer `balance`,
+  merchant and driver `available_balance` and `pending_escrow_balance`, and the suspense wallet's two
+  balances under its `purpose`. Zero balances are included, so a holder can prove they were owed nothing.
+  **Escrow holds are not liabilities of their own**: checkout moves the buyer's money into the merchant's
+  and driver's (or suspense's) pending balances, so the `HELD` row and the pending balance are the same
+  money. Counting both would double it. Total liabilities move only on a top-up; every escrow operation
+  is a transfer between the balances listed here.
+- **`customer_wallets.held_balance` stops the snapshot.** Nothing has ever written it (checked through
+  the whole history on 2026-10-12); a non-zero value means a flow this snapshot does not know about, and
+  leaving it out would understate what is owed. `CustomerWallet.liabilities()` refuses instead.
+- **One instant.** The read is one `REPEATABLE READ`, read-only transaction, one statement per wallet
+  table; the adapter checks `transaction_isolation` and `transaction_read_only` itself and refuses to
+  run otherwise. Proven on 2026-10-12 by `escrowTrafficNeverChangesWhatASnapshotSeesOwed`: escrow traffic
+  between three parties while snapshots run must never change what the three are owed. Under
+  `READ COMMITTED` the same test failed **295 of 1024 snapshots** over 353 movements (money counted
+  twice or not at all, in exact 150,000 / 130,000 / 20,000 steps); under `REPEATABLE READ`, none.
+  `as_of` is `clock_timestamp()` read by the statement that takes the snapshot.
+- **The stream is header, batches of 500, trailer.** The trailer carries the account count and the
+  total. Anything short of a trailer followed by `OK` is not a snapshot; a reader must also check the
+  count and the sum itself.
+- **Exact minor units or nothing.** A balance or total that is not a whole number of minor units, or
+  does not fit an int64, fails the snapshot with `FAILED_PRECONDITION LIABILITY_SNAPSHOT_REFUSED` rather
+  than being rounded or wrapped. `UNAVAILABLE LIABILITY_SNAPSHOT_UNAVAILABLE` means the ledger could not
+  be read and is retryable; `INVALID_ARGUMENT` is a currency that is not ISO 4217.
+- **Flow control is a poll, not `setOnReadyHandler`.** grpc-java delivers `onReady` on the call's
+  serializing executor, behind the handler that is blocked writing the stream, so the callback cannot
+  fire until the handler returns. `GrpcLiabilitySnapshotStream` polls `isReady()` (transport state) with
+  backoff, watches the call's `Context` for a hang-up (cancelled from outside the serializer), and gives
+  up after 30 seconds without progress so a stalled reader cannot hold the transaction open. Postgres
+  backs that with `statement_timeout` 120s and `idle_in_transaction_session_timeout` 60s.
+
+### Callers are scoped per service
+
+`GRPC_ALLOWED_CALLERS` takes `caller` (every service on this server) or `caller@package.Service`
+(that one service), the syntax matching already uses. The notary is listed as
+`notary@payment.v1.LiabilityService`: it can read what is owed and can never reach an escrow RPC.
+
+`order` stays a bare entry for now, which also lets it read the snapshot. Scoping it to
+`order@payment.v1.PaymentService,order@grpc.reflection.v1.ServerReflection` was run end to end on
+2026-10-12 (escrow and the gates' reflection probes pass, the snapshot is refused), but a payment image
+older than this change reads `order@…` as a service literally named that and would refuse order's escrow
+calls. Scope order once no image without the `@` parser can be rolled back to.
+
 ## Spring Boot 4, and what was kept back
 
 Boot 3.5's last release carries Spring Framework 6.2.19, which has two critical CVEs fixed only in

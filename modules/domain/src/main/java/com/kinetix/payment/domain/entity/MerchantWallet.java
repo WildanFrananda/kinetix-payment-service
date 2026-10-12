@@ -2,6 +2,7 @@ package com.kinetix.payment.domain.entity;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 public record MerchantWallet(
     Long id,
@@ -11,7 +12,7 @@ public record MerchantWallet(
     String currency,
     Instant createdAt,
     Instant updatedAt
-) {
+) implements LiabilityHolder {
     public MerchantWallet {
         if (merchantPrincipalId == null || merchantPrincipalId.isBlank()) {
             throw new IllegalArgumentException("A merchant principal id is required");
@@ -69,6 +70,24 @@ public record MerchantWallet(
             currency,
             createdAt,
             Instant.now()
+        );
+    }
+
+    @Override
+    public List<LiabilityAccount> liabilities() {
+        return List.of(
+            new LiabilityAccount(
+                LiabilityKind.MERCHANT_AVAILABLE,
+                merchantPrincipalId,
+                availableBalance,
+                currency
+            ),
+            new LiabilityAccount(
+                LiabilityKind.MERCHANT_PENDING_ESCROW,
+                merchantPrincipalId,
+                pendingEscrowBalance,
+                currency
+            )
         );
     }
 }

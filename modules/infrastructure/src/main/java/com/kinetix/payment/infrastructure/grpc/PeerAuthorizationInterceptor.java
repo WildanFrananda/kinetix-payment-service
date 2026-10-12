@@ -10,11 +10,7 @@ import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
-import java.util.Arrays;
-import java.util.LinkedHashSet;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import org.slf4j.Logger;
@@ -34,14 +30,10 @@ public class PeerAuthorizationInterceptor implements ServerInterceptor {
 
     private static final String MDC_REQUEST_ID = "requestId";
 
-    private final Set<String> allowed;
+    private final CallerAllowList allowed;
 
-    @SuppressWarnings("null")
     public PeerAuthorizationInterceptor(@Value("${kinetix.grpc.allowed-callers:}") String raw) {
-        this.allowed = Arrays.stream(raw.split(","))
-            .map(String::trim)
-            .filter(entry -> !entry.isEmpty())
-            .collect(Collectors.toCollection(LinkedHashSet::new));
+        this.allowed = CallerAllowList.parse(raw);
 
         if (allowed.isEmpty()) {
             throw new IllegalStateException(
@@ -49,7 +41,7 @@ public class PeerAuthorizationInterceptor implements ServerInterceptor {
                     + "server, or the gRPC surface is unreachable."
                 );
         }
-        LOG.info("gRPC callers allowed on this server: {}", allowed);
+        LOG.info("gRPC callers allowed on this server: {}", allowed.describe());
     }
 
     @Override
@@ -84,12 +76,13 @@ public class PeerAuthorizationInterceptor implements ServerInterceptor {
         }
 
         String service = peer.get();
-        if (!allowed.contains(service)) {
-            LOG.warn("refused a gRPC call to {} from {}, which is not on the allow list",
-                call.getMethodDescriptor().getFullMethodName(), service
+        String called = call.getMethodDescriptor().getServiceName();
+        if (!allowed.permits(service, called)) {
+            LOG.warn("refused a gRPC call to {} from {}, which may not reach {} on this server",
+                call.getMethodDescriptor().getFullMethodName(), service, called
             );
             call.close(Status.PERMISSION_DENIED.withDescription(
-                "service '" + service + "' may not call this server"), new Metadata()
+                "service '" + service + "' may not call " + called), new Metadata()
             );
             return new Listener<>() {};
         }

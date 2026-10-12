@@ -3,6 +3,7 @@ package com.kinetix.payment.domain.entity;
 import com.kinetix.payment.domain.exception.InsufficientBalanceException;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 public record CustomerWallet(
     Long id,
@@ -12,7 +13,7 @@ public record CustomerWallet(
     String currency,
     Instant createdAt,
     Instant updatedAt
-) {
+) implements LiabilityHolder {
     public CustomerWallet {
         if (customerPrincipalId == null || customerPrincipalId.isBlank()) {
             throw new IllegalArgumentException("A customer principal id is required");
@@ -67,6 +68,24 @@ public record CustomerWallet(
             currency,
             createdAt,
             Instant.now()
+        );
+    }
+
+    @Override
+    public List<LiabilityAccount> liabilities() {
+        if (heldBalance.signum() != 0) {
+            throw new IllegalStateException(
+                "customer " + customerPrincipalId + " has " + heldBalance + " in held_balance, which no "
+                    + "payment flow writes; a snapshot that left it out would understate what is owed"
+            );
+        }
+        return List.of(
+            new LiabilityAccount(
+                LiabilityKind.CUSTOMER_BALANCE,
+                customerPrincipalId,
+                balance,
+                currency
+            )
         );
     }
 }

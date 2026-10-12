@@ -2,6 +2,7 @@ package com.kinetix.payment.domain.entity;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 public record SuspenseWallet(
     Long id,
@@ -11,7 +12,7 @@ public record SuspenseWallet(
     String currency,
     Instant createdAt,
     Instant updatedAt
-) {
+) implements LiabilityHolder {
     public static final String UNASSIGNED_DRIVER_SHIPPING_FEE = "UNASSIGNED_DRIVER_SHIPPING_FEE";
 
     public SuspenseWallet {
@@ -92,6 +93,24 @@ public record SuspenseWallet(
             currency,
             createdAt,
             Instant.now()
+        );
+    }
+
+    @Override
+    public List<LiabilityAccount> liabilities() {
+        return List.of(
+            new LiabilityAccount(
+                LiabilityKind.SUSPENSE_AVAILABLE,
+                purpose,
+                availableBalance,
+                currency
+            ),
+            new LiabilityAccount(
+                LiabilityKind.SUSPENSE_PENDING_ESCROW,
+                purpose,
+                pendingEscrowBalance,
+                currency
+            )
         );
     }
 }

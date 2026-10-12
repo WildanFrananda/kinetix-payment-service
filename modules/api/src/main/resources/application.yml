@@ -65,9 +65,10 @@ kinetix:
     issuer: ${JWT_ISSUER}
     audience: ${JWT_AUDIENCE}
   grpc:
-    # Which services may call this server. Today only order — it already carries
-    # payment_service.proto and is the caller escrow exists for. mTLS proves a peer holds a
-    # certificate from our CA, which every service does; this is what makes the surface narrow.
+    # Which services may call this server. mTLS proves a peer holds a certificate from our CA,
+    # which every service does; this is what makes the surface narrow. `caller@package.Service`
+    # admits a caller to that one service only, the same syntax matching uses: the notary reads
+    # payment.v1.LiabilityService and must never reach the escrow RPCs.
     allowed-callers: ${GRPC_ALLOWED_CALLERS}
   reconciliation:
     # Defaults, not required environment. These are cadences, not credentials or topology: a wrong
