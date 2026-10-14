@@ -18,9 +18,11 @@ public record CustomerWallet(
         if (customerPrincipalId == null || customerPrincipalId.isBlank()) {
             throw new IllegalArgumentException("A customer principal id is required");
         }
+
         if (balance.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("Balance cannot be negative");
         }
+
         if (heldBalance.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("Held balance cannot be negative");
         }
@@ -42,6 +44,7 @@ public record CustomerWallet(
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Top-up amount must be positive");
         }
+
         return new CustomerWallet(
             id,
             customerPrincipalId,
@@ -57,9 +60,13 @@ public record CustomerWallet(
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Deduction amount must be positive");
         }
+
         if (balance.compareTo(amount) < 0) {
-            throw new InsufficientBalanceException("Insufficient customer wallet balance. Required: " + amount + ", Available: " + balance);
+            throw new InsufficientBalanceException(
+                "Insufficient customer wallet balance. Required: " + amount + ", Available: " + balance
+            );
         }
+
         return new CustomerWallet(
             id,
             customerPrincipalId,
@@ -79,6 +86,7 @@ public record CustomerWallet(
                     + "payment flow writes; a snapshot that left it out would understate what is owed"
             );
         }
+
         return List.of(
             new LiabilityAccount(
                 LiabilityKind.CUSTOMER_BALANCE,

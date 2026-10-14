@@ -31,7 +31,15 @@ public class SuspenseWalletJpaEntity {
 
     public SuspenseWalletJpaEntity() {}
 
-    public SuspenseWalletJpaEntity(Long id, String purpose, BigDecimal availableBalance, BigDecimal pendingEscrowBalance, String currency, Instant createdAt, Instant updatedAt) {
+    public SuspenseWalletJpaEntity(
+        Long id,
+        String purpose,
+        BigDecimal availableBalance,
+        BigDecimal pendingEscrowBalance,
+        String currency,
+        Instant createdAt,
+        Instant updatedAt
+    ) {
         this.id = id;
         this.purpose = purpose;
         this.availableBalance = availableBalance;

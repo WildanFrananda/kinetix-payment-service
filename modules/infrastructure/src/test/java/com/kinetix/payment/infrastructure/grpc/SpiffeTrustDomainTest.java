@@ -66,7 +66,8 @@ class SpiffeTrustDomainTest {
         assertTrue(
             SpiffeId.serviceIn(
                 "spiffe://kinetix.local.example.com/service/order",
-                SpiffeId.prefixFor("kinetix.local"))
+                SpiffeId.prefixFor("kinetix.local")
+            )
                     .isEmpty()
         );
     }

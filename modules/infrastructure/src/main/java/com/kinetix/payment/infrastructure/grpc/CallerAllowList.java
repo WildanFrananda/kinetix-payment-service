@@ -29,13 +29,16 @@ final class CallerAllowList {
                     unrestricted.add(entry);
                     return;
                 }
+
                 String caller = entry.substring(0, at).trim();
                 String service = entry.substring(at + 1).trim();
                 if (caller.isEmpty() || service.isEmpty() || service.contains("@")) {
                     throw new IllegalStateException(
-                        "'" + entry + "' in kinetix.grpc.allowed-callers is neither a service nor service@package.Service"
+                        "'" + entry + "' in kinetix.grpc.allowed-callers is neither a service "
+                            + "nor service@package.Service"
                     );
                 }
+
                 scoped.computeIfAbsent(caller, ignored -> new LinkedHashSet<>()).add(service);
             });
         unrestricted.forEach(scoped::remove);
@@ -50,6 +53,7 @@ final class CallerAllowList {
         if (unrestricted.contains(caller)) {
             return true;
         }
+
         Set<String> services = scoped.get(caller);
         return services != null && services.contains(service);
     }
@@ -57,8 +61,9 @@ final class CallerAllowList {
     String describe() {
         Set<String> described = new TreeSet<>();
         unrestricted.forEach(caller -> described.add(caller + " (any service)"));
-        scoped.forEach((caller, services) ->
-            described.add(caller + " (" + String.join(" ", new TreeSet<>(services)) + ")")
+        scoped.forEach(
+            (caller, services) ->
+                described.add(caller + " (" + String.join(" ", new TreeSet<>(services)) + ")")
         );
         return described.stream().collect(Collectors.joining(", "));
     }

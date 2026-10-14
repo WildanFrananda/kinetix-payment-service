@@ -620,3 +620,46 @@ databaseChangeLog:
     - dropColumn:
         columnName: auto_release_at
         tableName: escrow_holds
+- changeSet:
+    id: 1791975739534-8
+    author: super (generated)
+    comment: >-
+      What each liability snapshot handed to the notary contained: its time, count, total and the
+      SHA-256 of its rows. The notary's watch checks an epoch against this record, not against anything
+      the notary says.
+    changes:
+    - createTable:
+        columns:
+        - column:
+            constraints:
+              nullable: false
+              primaryKey: true
+              primaryKeyName: liability_snapshot_recordsPK
+            name: id
+            type: UUID
+        - column:
+            constraints:
+              nullable: false
+            name: account_count
+            type: BIGINT
+        - column:
+            constraints:
+              nullable: false
+            name: as_of
+            type: TIMESTAMP(6) WITH TIME ZONE
+        - column:
+            constraints:
+              nullable: false
+            name: currency
+            type: VARCHAR(3)
+        - column:
+            constraints:
+              nullable: false
+            name: digest
+            type: BYTEA
+        - column:
+            constraints:
+              nullable: false
+            name: total
+            type: numeric(19, 2)
+        tableName: liability_snapshot_records

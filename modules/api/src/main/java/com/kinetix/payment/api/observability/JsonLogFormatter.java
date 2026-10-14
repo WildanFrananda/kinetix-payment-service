@@ -36,6 +36,7 @@ public class JsonLogFormatter implements StructuredLogFormatter<ILoggingEvent> {
             if (RequestIdFilter.MDC_KEY.equals(entry.getKey()) || line.containsKey(entry.getKey())) {
                 continue;
             }
+
             line.put(entry.getKey(), entry.getValue());
         }
     }
@@ -44,6 +45,7 @@ public class JsonLogFormatter implements StructuredLogFormatter<ILoggingEvent> {
         if (failure == null) {
             return;
         }
+
         line.put("error_type", failure.getClassName());
         line.put("error_message", failure.getMessage());
         line.put("error_stack_trace", ThrowableProxyUtil.asString(failure));

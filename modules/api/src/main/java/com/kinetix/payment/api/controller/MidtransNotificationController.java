@@ -29,14 +29,17 @@ public class MidtransNotificationController {
 
     @PostMapping("/notifications")
     public Map<String, String> receive(@RequestBody MidtransNotificationRequest notification) {
-        boolean authentic = gateway.isAuthentic(new GatewayNotification(
-            notification.orderId(),
-            notification.statusCode(),
-            notification.grossAmount(),
-            notification.signatureKey()
-        ));
+        boolean authentic = gateway.isAuthentic(
+            new GatewayNotification(
+                notification.orderId(),
+                notification.statusCode(),
+                notification.grossAmount(),
+                notification.signatureKey()
+            )
+        );
         if (!authentic) {
-            LOG.warn("rejected a payment notification for {} whose signature does not verify",
+            LOG.warn(
+                "rejected a payment notification for {} whose signature does not verify",
                 notification.orderId()
             );
             throw new NotificationRejectedException("the notification signature does not verify");
@@ -44,8 +47,10 @@ public class MidtransNotificationController {
 
         SettlementOutcome outcome = topUpService.settle(notification.orderId());
         return Map.of(
-            "referenceNumber", outcome.transaction().referenceNumber(),
-            "status", outcome.transaction().status().name()
+            "referenceNumber",
+            outcome.transaction().referenceNumber(),
+            "status",
+            outcome.transaction().status().name()
         );
     }
 }

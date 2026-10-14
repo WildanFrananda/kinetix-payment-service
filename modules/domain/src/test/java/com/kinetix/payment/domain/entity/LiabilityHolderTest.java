@@ -30,7 +30,13 @@ class LiabilityHolderTest {
     @DisplayName("a held balance stops the snapshot instead of being left out of it")
     void heldBalanceIsRefused() {
         CustomerWallet held = new CustomerWallet(
-            1L, PRINCIPAL, BigDecimal.ONE, new BigDecimal("0.01"), "IDR", Instant.now(), Instant.now()
+            1L,
+            PRINCIPAL,
+            BigDecimal.ONE,
+            new BigDecimal("0.01"),
+            "IDR",
+            Instant.now(),
+            Instant.now()
         );
 
         IllegalStateException refused = assertThrows(IllegalStateException.class, held::liabilities);
@@ -45,10 +51,13 @@ class LiabilityHolderTest {
             .addPendingEscrow(new BigDecimal("130000.00"))
             .releaseEscrowToAvailable(new BigDecimal("30000.00"));
 
-        assertEquals(List.of(
-            account(LiabilityKind.MERCHANT_AVAILABLE, PRINCIPAL, "30000.00"),
-            account(LiabilityKind.MERCHANT_PENDING_ESCROW, PRINCIPAL, "100000.00")
-        ), wallet.liabilities());
+        assertEquals(
+            List.of(
+                account(LiabilityKind.MERCHANT_AVAILABLE, PRINCIPAL, "30000.00"),
+                account(LiabilityKind.MERCHANT_PENDING_ESCROW, PRINCIPAL, "100000.00")
+            ),
+            wallet.liabilities()
+        );
     }
 
     @Test
@@ -58,10 +67,13 @@ class LiabilityHolderTest {
             .addPendingEscrow(new BigDecimal("20000.00"))
             .creditAvailable(new BigDecimal("5000.00"));
 
-        assertEquals(List.of(
-            account(LiabilityKind.DRIVER_AVAILABLE, PRINCIPAL, "5000.00"),
-            account(LiabilityKind.DRIVER_PENDING_ESCROW, PRINCIPAL, "20000.00")
-        ), wallet.liabilities());
+        assertEquals(
+            List.of(
+                account(LiabilityKind.DRIVER_AVAILABLE, PRINCIPAL, "5000.00"),
+                account(LiabilityKind.DRIVER_PENDING_ESCROW, PRINCIPAL, "20000.00")
+            ),
+            wallet.liabilities()
+        );
     }
 
     @Test
@@ -72,10 +84,17 @@ class LiabilityHolderTest {
             .addPendingEscrow(new BigDecimal("20000.00"))
             .liabilities();
 
-        assertEquals(List.of(
-            account(LiabilityKind.SUSPENSE_AVAILABLE, SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE, "0"),
-            account(LiabilityKind.SUSPENSE_PENDING_ESCROW, SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE, "20000.00")
-        ), accounts);
+        assertEquals(
+            List.of(
+                account(LiabilityKind.SUSPENSE_AVAILABLE, SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE, "0"),
+                account(
+                    LiabilityKind.SUSPENSE_PENDING_ESCROW,
+                    SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE,
+                    "20000.00"
+                )
+            ),
+            accounts
+        );
         assertTrue(accounts.stream().noneMatch(LiabilityAccount::ownedByPrincipal));
     }
 
@@ -94,7 +113,8 @@ class LiabilityHolderTest {
         assertThrows(IllegalArgumentException.class, () -> account(LiabilityKind.DRIVER_AVAILABLE, PRINCIPAL, "-0.01"));
         assertThrows(IllegalArgumentException.class, () -> account(LiabilityKind.DRIVER_AVAILABLE, " ", "1"));
         assertThrows(IllegalArgumentException.class, () -> account(null, PRINCIPAL, "1"));
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(
+            IllegalArgumentException.class,
             () -> new LiabilityAccount(LiabilityKind.DRIVER_AVAILABLE, PRINCIPAL, BigDecimal.ONE, "")
         );
         assertFalse(account(LiabilityKind.SUSPENSE_AVAILABLE, "x", "0").ownedByPrincipal());

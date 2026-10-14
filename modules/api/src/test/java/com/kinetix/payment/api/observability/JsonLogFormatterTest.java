@@ -21,11 +21,13 @@ class JsonLogFormatterTest {
 
     @Test
     void aPlainGrepForTheCorrelationIdStillMatchesTheLine() {
-        String line = formatter.format(event(
-            "gRPC payment.v1.PaymentService/CreateEscrowHold from order (request_id="
-                + REQUEST_ID + ")",
-            Map.of(RequestIdFilter.MDC_KEY, REQUEST_ID)
-        ));
+        String line = formatter.format(
+            event(
+                "gRPC payment.v1.PaymentService/CreateEscrowHold from order (request_id="
+                    + REQUEST_ID + ")",
+                Map.of(RequestIdFilter.MDC_KEY, REQUEST_ID)
+            )
+        );
 
         assertTrue(line.contains(REQUEST_ID), line);
     }

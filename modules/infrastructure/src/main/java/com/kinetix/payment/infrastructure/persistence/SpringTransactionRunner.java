@@ -19,7 +19,8 @@ public class SpringTransactionRunner implements TransactionRunnerPort {
     private final EntityManagerFactory entityManagerFactory;
 
     public SpringTransactionRunner(
-        PlatformTransactionManager transactionManager, EntityManagerFactory entityManagerFactory
+        PlatformTransactionManager transactionManager,
+        EntityManagerFactory entityManagerFactory
     ) {
         this.template = new TransactionTemplate(transactionManager);
         this.template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);

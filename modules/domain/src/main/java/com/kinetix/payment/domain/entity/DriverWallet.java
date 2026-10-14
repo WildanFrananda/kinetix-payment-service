@@ -17,9 +17,11 @@ public record DriverWallet(
         if (driverPrincipalId == null || driverPrincipalId.isBlank()) {
             throw new IllegalArgumentException("A driver principal id is required");
         }
+
         if (availableBalance.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("Available balance cannot be negative");
         }
+
         if (pendingEscrowBalance.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("Pending escrow balance cannot be negative");
         }
@@ -65,6 +67,7 @@ public record DriverWallet(
         if (amount == null || amount.signum() <= 0) {
             throw new IllegalArgumentException("a credit to a driver must be a positive amount");
         }
+
         return new DriverWallet(
             id,
             driverPrincipalId,

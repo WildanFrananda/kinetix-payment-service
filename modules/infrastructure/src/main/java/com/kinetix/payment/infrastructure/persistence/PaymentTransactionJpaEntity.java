@@ -53,7 +53,19 @@ public class PaymentTransactionJpaEntity {
 
     public PaymentTransactionJpaEntity() {}
 
-    public PaymentTransactionJpaEntity(Long id, String referenceNumber, String externalTransactionId, String principalId, PaymentTransaction.TransactionType type, PaymentTransaction.PaymentMethod method, BigDecimal amount, PaymentTransaction.TransactionStatus status, String gatewayResponse, Instant createdAt, String idempotencyKey) {
+    public PaymentTransactionJpaEntity(
+        Long id,
+        String referenceNumber,
+        String externalTransactionId,
+        String principalId,
+        PaymentTransaction.TransactionType type,
+        PaymentTransaction.PaymentMethod method,
+        BigDecimal amount,
+        PaymentTransaction.TransactionStatus status,
+        String gatewayResponse,
+        Instant createdAt,
+        String idempotencyKey
+    ) {
         this.id = id;
         this.referenceNumber = referenceNumber;
         this.externalTransactionId = externalTransactionId;

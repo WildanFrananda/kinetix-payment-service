@@ -8,7 +8,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class WalletPrincipalTest {
-
     private static final String PRINCIPAL = "9f1d4a3e-1c62-4d0a-9a7b-2f5c8e0b41d7";
 
     @Test
@@ -50,18 +49,42 @@ class WalletPrincipalTest {
         String merchant = "3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3";
 
         EscrowHold unassigned = EscrowHold.createNewHold(
-            "ORD-2001", PRINCIPAL, merchant, null,
-            new BigDecimal("150000.00"), new BigDecimal("130000.00"), new BigDecimal("20000.00"));
+            "ORD-2001",
+            PRINCIPAL,
+            merchant,
+            null,
+            new BigDecimal("150000.00"),
+            new BigDecimal("130000.00"),
+            new BigDecimal("20000.00")
+        );
         assertEquals(PRINCIPAL, unassigned.customerPrincipalId());
         assertEquals(merchant, unassigned.merchantPrincipalId());
 
-        assertThrows(IllegalArgumentException.class, () -> EscrowHold.createNewHold(
-            "ORD-2002", "", merchant, null,
-            new BigDecimal("1.00"), new BigDecimal("1.00"), BigDecimal.ZERO));
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> EscrowHold.createNewHold(
+                "ORD-2002",
+                "",
+                merchant,
+                null,
+                new BigDecimal("1.00"),
+                new BigDecimal("1.00"),
+                BigDecimal.ZERO
+            )
+        );
 
-        assertThrows(IllegalArgumentException.class, () -> EscrowHold.createNewHold(
-            "ORD-2003", PRINCIPAL, null, null,
-            new BigDecimal("1.00"), new BigDecimal("1.00"), BigDecimal.ZERO));
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> EscrowHold.createNewHold(
+                "ORD-2003",
+                PRINCIPAL,
+                null,
+                null,
+                new BigDecimal("1.00"),
+                new BigDecimal("1.00"),
+                BigDecimal.ZERO
+            )
+        );
     }
 
     @Test
@@ -71,8 +94,14 @@ class WalletPrincipalTest {
         String driver = "b7e2c05f-9a34-4c88-b1d6-0e7a3f52d914";
 
         EscrowHold released = EscrowHold.createNewHold(
-            "ORD-2004", PRINCIPAL, merchant, driver,
-            new BigDecimal("150000.00"), new BigDecimal("130000.00"), new BigDecimal("20000.00"))
+            "ORD-2004",
+            PRINCIPAL,
+            merchant,
+            driver,
+            new BigDecimal("150000.00"),
+            new BigDecimal("130000.00"),
+            new BigDecimal("20000.00")
+        )
             .markAsReleased();
 
         assertEquals(PRINCIPAL, released.customerPrincipalId());

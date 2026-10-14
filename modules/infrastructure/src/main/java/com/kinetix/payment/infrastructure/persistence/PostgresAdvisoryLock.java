@@ -36,12 +36,14 @@ public class PostgresAdvisoryLock implements AdvisoryLockPort {
         if (key == null || key.isBlank()) {
             throw new IllegalArgumentException("an advisory lock needs a key to hash");
         }
+
         if (!TransactionSynchronizationManager.isActualTransactionActive()) {
             throw new IllegalStateException(
                 "pg_advisory_xact_lock is released at the end of the transaction that took it; "
                     + "taking one outside a transaction locks nothing"
             );
         }
+
         EntityManager entityManager =
             EntityManagerFactoryUtils.getTransactionalEntityManager(entityManagerFactory);
         entityManager.unwrap(Session.class).doWork(connection -> {

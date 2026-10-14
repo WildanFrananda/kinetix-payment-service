@@ -44,9 +44,17 @@ public class WalletController {
         @Valid @RequestBody TopUpRequest request
     ) {
         AccessClaims caller = require(jwt, AccessClaims.CUSTOMER);
-        return TopUpResponse.from(topUpService.requestTopUp(new TopUpCommand(
-            caller.principalId(), idempotencyKey, request.amount(), request.paymentMethod(), request.bank()
-        )));
+        return TopUpResponse.from(
+            topUpService.requestTopUp(
+                new TopUpCommand(
+                    caller.principalId(),
+                    idempotencyKey,
+                    request.amount(),
+                    request.paymentMethod(),
+                    request.bank()
+                )
+            )
+        );
     }
 
     @GetMapping("/customer/topup/{referenceNumber}")
@@ -79,6 +87,7 @@ public class WalletController {
                 "this account is a " + caller.role() + " and holds no " + role + " wallet"
             );
         }
+
         return caller;
     }
 }

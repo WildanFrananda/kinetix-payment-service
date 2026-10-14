@@ -20,7 +20,9 @@ public class RequestIdFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(
-        HttpServletRequest request, HttpServletResponse response, FilterChain chain
+        HttpServletRequest request,
+        HttpServletResponse response,
+        FilterChain chain
     ) throws ServletException, IOException {
         String requestId = request.getHeader(HEADER);
 

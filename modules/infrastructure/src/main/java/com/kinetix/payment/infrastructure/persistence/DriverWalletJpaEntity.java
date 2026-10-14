@@ -31,7 +31,15 @@ public class DriverWalletJpaEntity {
 
     public DriverWalletJpaEntity() {}
 
-    public DriverWalletJpaEntity(Long id, String driverPrincipalId, BigDecimal availableBalance, BigDecimal pendingEscrowBalance, String currency, Instant createdAt, Instant updatedAt) {
+    public DriverWalletJpaEntity(
+        Long id,
+        String driverPrincipalId,
+        BigDecimal availableBalance,
+        BigDecimal pendingEscrowBalance,
+        String currency,
+        Instant createdAt,
+        Instant updatedAt
+    ) {
         this.id = id;
         this.driverPrincipalId = driverPrincipalId;
         this.availableBalance = availableBalance;

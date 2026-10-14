@@ -71,27 +71,49 @@ class LiabilitySnapshotIntegrationTest {
 
         assertTrue(!snapshot.asOf.isBefore(before.minusSeconds(5)), "dated " + snapshot.asOf);
         assertEquals(Map.of(LiabilityKind.CUSTOMER_BALANCE, new BigDecimal("350000.00")), owed(snapshot, customer));
-        assertEquals(Map.of(
-            LiabilityKind.MERCHANT_AVAILABLE, new BigDecimal("0.00"),
-            LiabilityKind.MERCHANT_PENDING_ESCROW, MERCHANT_AMOUNT
-        ), owed(snapshot, merchant));
-        assertEquals(Map.of(
-            LiabilityKind.DRIVER_AVAILABLE, new BigDecimal("0.00"),
-            LiabilityKind.DRIVER_PENDING_ESCROW, SHIPPING
-        ), owed(snapshot, driver));
-        assertEquals(snapshot.accounts.size(), snapshot.accounts.stream()
-            .map(account -> account.kind() + "/" + account.holder())
-            .distinct()
-            .count()
+        assertEquals(
+            Map.of(
+                LiabilityKind.MERCHANT_AVAILABLE,
+                new BigDecimal("0.00"),
+                LiabilityKind.MERCHANT_PENDING_ESCROW,
+                MERCHANT_AMOUNT
+            ),
+            owed(snapshot, merchant)
+        );
+        assertEquals(
+            Map.of(
+                LiabilityKind.DRIVER_AVAILABLE,
+                new BigDecimal("0.00"),
+                LiabilityKind.DRIVER_PENDING_ESCROW,
+                SHIPPING
+            ),
+            owed(snapshot, driver)
+        );
+        assertEquals(
+            snapshot.accounts.size(),
+            snapshot.accounts.stream()
+                .map(account -> account.kind() + "/" + account.holder())
+                .distinct()
+                .count()
         );
     }
 
     @Test
     void aWalletInAnotherCurrencyBelongsToThatCurrencysSnapshot() {
         String customer = UUID.randomUUID().toString();
-        transactionRunner.inNewTransaction(() -> customerWalletRepository.save(new CustomerWallet(
-            null, customer, new BigDecimal("12.34"), BigDecimal.ZERO, "USD", Instant.now(), Instant.now()
-        )));
+        transactionRunner.inNewTransaction(
+            () -> customerWalletRepository.save(
+                new CustomerWallet(
+                    null,
+                    customer,
+                    new BigDecimal("12.34"),
+                    BigDecimal.ZERO,
+                    "USD",
+                    Instant.now(),
+                    Instant.now()
+                )
+            )
+        );
 
         assertTrue(take("IDR").of(customer).isEmpty());
         assertEquals(
@@ -124,11 +146,14 @@ class LiabilitySnapshotIntegrationTest {
                     } else {
                         escrow.refundEscrow(order, "conservation probe", "r-" + order);
                     }
+
                     done++;
                 }
+
                 trading.set(false);
                 return done;
             });
+
             Future<?> reader = pool.submit(() -> {
                 while (trading.get()) {
                     BigDecimal owed = take("IDR").owedTo(parties);
@@ -137,6 +162,7 @@ class LiabilitySnapshotIntegrationTest {
                     }
                 }
             });
+
             moves = traffic.get();
             reader.get();
         } finally {
@@ -146,8 +172,10 @@ class LiabilitySnapshotIntegrationTest {
         List<BigDecimal> drifted = seen.stream().filter(owed -> owed.compareTo(FUNDED) != 0).toList();
         assertTrue(moves >= 20, "only " + moves + " escrow movements ran");
         assertTrue(seen.size() >= 20, "only " + seen.size() + " snapshots were taken");
-        assertTrue(drifted.isEmpty(), drifted.size() + " of " + seen.size() + " snapshots over " + moves
-            + " escrow movements saw money that was in flight, first " + drifted.stream().limit(5).toList()
+        assertTrue(
+            drifted.isEmpty(),
+            drifted.size() + " of " + seen.size() + " snapshots over " + moves
+                + " escrow movements saw money that was in flight, first " + drifted.stream().limit(5).toList()
         );
         assertEquals(0, take("IDR").owedTo(parties).compareTo(FUNDED));
     }
@@ -164,24 +192,48 @@ class LiabilitySnapshotIntegrationTest {
     }
 
     private void fund(String customer, BigDecimal amount) {
-        transactionRunner.inNewTransaction(() -> customerWalletRepository.save(
-            CustomerWallet.createInitial(customer).topUp(amount)
-        ));
+        transactionRunner.inNewTransaction(
+            () -> customerWalletRepository.save(
+                CustomerWallet.createInitial(customer).topUp(amount)
+            )
+        );
     }
 
     private void hold(EscrowService escrow, String order, String customer, String merchant, String driver) {
-        escrow.createEscrowHold(new CreateEscrowHoldCommand(order, customer, merchant, driver,
-            TOTAL, MERCHANT_AMOUNT, SHIPPING, "k-" + order,
-            EscrowRequestFingerprint.forCreateHold(order, customer, merchant, driver,
-                TOTAL, MERCHANT_AMOUNT, SHIPPING
+        escrow.createEscrowHold(
+            new CreateEscrowHoldCommand(
+                order,
+                customer,
+                merchant,
+                driver,
+                TOTAL,
+                MERCHANT_AMOUNT,
+                SHIPPING,
+                "k-" + order,
+                EscrowRequestFingerprint.forCreateHold(
+                    order,
+                    customer,
+                    merchant,
+                    driver,
+                    TOTAL,
+                    MERCHANT_AMOUNT,
+                    SHIPPING
+                )
             )
-        ));
+        );
     }
 
     private EscrowService escrow() {
-        return new EscrowService(escrowRepository, customerWalletRepository, merchantWalletRepository,
-            driverWalletRepository, suspenseWalletRepository, paymentTransactionRepository,
-            idempotencyRepository, transactionRunner, advisoryLock
+        return new EscrowService(
+            escrowRepository,
+            customerWalletRepository,
+            merchantWalletRepository,
+            driverWalletRepository,
+            suspenseWalletRepository,
+            paymentTransactionRepository,
+            idempotencyRepository,
+            transactionRunner,
+            advisoryLock
         );
     }
 }

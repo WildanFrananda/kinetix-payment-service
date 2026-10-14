@@ -62,9 +62,13 @@ class WalletControllerTopUpTest {
 
     @Test
     void aTopUpAnswersAcceptedWithHowToPayAndChangesNoBalance() throws Exception {
-        when(topUpService.requestTopUp(any())).thenReturn(new TopUpOutcome(
-            pending(), new PaymentInstructions(VirtualAccountBank.BCA, "91019021579", null, null), false
-        ));
+        when(topUpService.requestTopUp(any())).thenReturn(
+            new TopUpOutcome(
+                pending(),
+                new PaymentInstructions(VirtualAccountBank.BCA, "91019021579", null, null),
+                false
+            )
+        );
 
         mvc.perform(topUp("k-1"))
             .andExpect(status().isAccepted())
@@ -77,7 +81,11 @@ class WalletControllerTopUpTest {
 
     @Test
     void theWalletIsTheTokensAndTheKeyIsTheHeaders() throws Exception {
-        when(topUpService.requestTopUp(any())).thenReturn(new TopUpOutcome(pending(), PaymentInstructions.none(), false));
+        when(
+            topUpService.requestTopUp(any())
+        ).thenReturn(
+            new TopUpOutcome(pending(), PaymentInstructions.none(), false)
+        );
 
         mvc.perform(topUp("k-2")).andExpect(status().isAccepted());
 
@@ -128,7 +136,13 @@ class WalletControllerTopUpTest {
     }
 
     private static PaymentTransaction pending() {
-        return PaymentTransaction.pendingTopUp("TOPUP-1", CUSTOMER, "k-1", PaymentMethod.MIDTRANS_VA, new BigDecimal("50000"))
+        return PaymentTransaction.pendingTopUp(
+            "TOPUP-1",
+            CUSTOMER,
+            "k-1",
+            PaymentMethod.MIDTRANS_VA,
+            new BigDecimal("50000")
+        )
             .withGatewayResponse("mid-1", "{}");
     }
 

@@ -1,18 +1,21 @@
 package com.kinetix.payment.infrastructure.grpc;
 
+import com.google.protobuf.ByteString;
 import com.google.protobuf.Timestamp;
 import com.kinetix.payment.application.LiabilitySnapshotSink;
 import com.kinetix.payment.application.LiabilitySnapshotTotals;
 import com.kinetix.payment.domain.entity.LiabilityAccount;
 import com.kinetix.payment.domain.entity.LiabilityKind;
+import com.kinetix.payment.domain.entity.MinorUnits;
 import common.v1.Common;
 import io.grpc.Context;
 import io.grpc.Status;
 import io.grpc.stub.ServerCallStreamObserver;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HexFormat;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
 import payment.v1.Liability;
@@ -20,7 +23,6 @@ import payment.v1.Liability;
 final class GrpcLiabilitySnapshotStream implements LiabilitySnapshotSink {
     static final int BATCH_SIZE = 500;
 
-    private static final BigDecimal MINOR_PER_MAJOR = new BigDecimal("100");
     private static final long FIRST_PAUSE_NANOS = TimeUnit.MILLISECONDS.toNanos(1);
     private static final long LONGEST_PAUSE_NANOS = TimeUnit.MILLISECONDS.toNanos(50);
 
@@ -40,13 +42,16 @@ final class GrpcLiabilitySnapshotStream implements LiabilitySnapshotSink {
     }
 
     @Override
-    public void begin(Instant asOf, String currency) {
-        send(Liability.StreamLiabilitySnapshotResponse.newBuilder()
-            .setHeader(Liability.LiabilitySnapshotHeader.newBuilder()
-                .setAsOf(timestamp(asOf))
-                .setCurrency(currency)
-            )
-            .build()
+    public void begin(UUID snapshotId, Instant asOf, String currency) {
+        send(
+            Liability.StreamLiabilitySnapshotResponse.newBuilder()
+                .setHeader(
+                    Liability.LiabilitySnapshotHeader.newBuilder()
+                        .setAsOf(timestamp(asOf))
+                        .setCurrency(currency)
+                        .setSnapshotId(snapshotId.toString())
+                )
+                .build()
         );
     }
 
@@ -60,6 +65,7 @@ final class GrpcLiabilitySnapshotStream implements LiabilitySnapshotSink {
         } else {
             wire.setSuspensePurpose(account.holder());
         }
+
         batch.addAccounts(wire);
         if (batch.getAccountsCount() >= BATCH_SIZE) {
             flush();
@@ -69,12 +75,15 @@ final class GrpcLiabilitySnapshotStream implements LiabilitySnapshotSink {
     @Override
     public void end(LiabilitySnapshotTotals totals) {
         flush();
-        send(Liability.StreamLiabilitySnapshotResponse.newBuilder()
-            .setTrailer(Liability.LiabilitySnapshotTrailer.newBuilder()
-                .setAccountCount(totals.accountCount())
-                .setTotal(money(totals.total(), totals.currency()))
-            )
-            .build()
+        send(
+            Liability.StreamLiabilitySnapshotResponse.newBuilder()
+                .setTrailer(
+                    Liability.LiabilitySnapshotTrailer.newBuilder()
+                        .setAccountCount(totals.accountCount())
+                        .setTotal(money(totals.total(), totals.currency()))
+                        .setDigest(ByteString.copyFrom(HexFormat.of().parseHex(totals.digest())))
+                )
+                .build()
         );
     }
 
@@ -82,6 +91,7 @@ final class GrpcLiabilitySnapshotStream implements LiabilitySnapshotSink {
         if (batch.getAccountsCount() == 0) {
             return;
         }
+
         send(Liability.StreamLiabilitySnapshotResponse.newBuilder().setAccounts(batch).build());
         batch = Liability.LiabilityAccountBatch.newBuilder();
     }
@@ -100,11 +110,13 @@ final class GrpcLiabilitySnapshotStream implements LiabilitySnapshotSink {
                     .withDescription("the caller hung up before the liability snapshot was delivered")
                     .asRuntimeException();
             }
+
             if (System.nanoTime() - started > stallLimit.toNanos()) {
                 throw Status.DEADLINE_EXCEEDED
                     .withDescription("the caller read nothing for " + stallLimit + ", so the snapshot was abandoned")
                     .asRuntimeException();
             }
+
             LockSupport.parkNanos(pause);
             pause = Math.min(pause * 2, LONGEST_PAUSE_NANOS);
         }
@@ -112,7 +124,7 @@ final class GrpcLiabilitySnapshotStream implements LiabilitySnapshotSink {
 
     private static Common.Money money(BigDecimal amount, String currency) {
         return Common.Money.newBuilder()
-            .setAmountMinor(amount.multiply(MINOR_PER_MAJOR).setScale(0, RoundingMode.UNNECESSARY).longValueExact())
+            .setAmountMinor(MinorUnits.of(amount))
             .setCurrency(currency)
             .build();
     }

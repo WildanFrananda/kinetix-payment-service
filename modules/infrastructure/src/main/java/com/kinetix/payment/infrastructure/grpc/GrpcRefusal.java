@@ -15,10 +15,12 @@ final class GrpcRefusal {
     static StatusRuntimeException of(Status status, String errorCode, Throwable cause) {
         String message = cause.getMessage() == null ? errorCode : cause.getMessage();
         Metadata trailers = new Metadata();
-        trailers.put(ERROR_DETAIL, Common.ErrorDetail.newBuilder()
-            .setErrorCode(errorCode)
-            .setMessage(message)
-            .build()
+        trailers.put(
+            ERROR_DETAIL,
+            Common.ErrorDetail.newBuilder()
+                .setErrorCode(errorCode)
+                .setMessage(message)
+                .build()
         );
         return status.withDescription(message).asRuntimeException(trailers);
     }

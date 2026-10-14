@@ -20,14 +20,24 @@ class EscrowRequestFingerprintTest {
 
         assertEquals(
             fingerprintOf(new BigDecimal("150000")),
-            fingerprintOf(new BigDecimal("150000.00")
-        ));
+            fingerprintOf(
+                new BigDecimal("150000.00")
+            )
+        );
     }
 
     @Test
     void aFingerprintRebuiltFromAStoredHoldMatchesTheOneTakenOffTheWire() {
         String fromWire = EscrowRequestFingerprint.forCreateHold(
-            ORDER, CUSTOMER, MERCHANT, DRIVER, 15_000_000L, 13_000_000L, 2_000_000L, "IDR");
+            ORDER,
+            CUSTOMER,
+            MERCHANT,
+            DRIVER,
+            15_000_000L,
+            13_000_000L,
+            2_000_000L,
+            "IDR"
+        );
 
         String fromRow = EscrowRequestFingerprint.forCreateHold(storedHold());
 
@@ -38,9 +48,25 @@ class EscrowRequestFingerprintTest {
     void anAbsentCurrencyMeansTheSameThingAsIDR() {
         assertEquals(
             EscrowRequestFingerprint.forCreateHold(
-                ORDER, CUSTOMER, MERCHANT, DRIVER, 15_000_000L, 13_000_000L, 2_000_000L, ""),
+                ORDER,
+                CUSTOMER,
+                MERCHANT,
+                DRIVER,
+                15_000_000L,
+                13_000_000L,
+                2_000_000L,
+                ""
+            ),
             EscrowRequestFingerprint.forCreateHold(
-                ORDER, CUSTOMER, MERCHANT, DRIVER, 15_000_000L, 13_000_000L, 2_000_000L, "IDR")
+                ORDER,
+                CUSTOMER,
+                MERCHANT,
+                DRIVER,
+                15_000_000L,
+                13_000_000L,
+                2_000_000L,
+                "IDR"
+            )
         );
     }
 
@@ -48,9 +74,25 @@ class EscrowRequestFingerprintTest {
     void aDifferentCurrencyIsADifferentRequest() {
         assertNotEquals(
             EscrowRequestFingerprint.forCreateHold(
-                ORDER, CUSTOMER, MERCHANT, DRIVER, 15_000_000L, 13_000_000L, 2_000_000L, "IDR"),
+                ORDER,
+                CUSTOMER,
+                MERCHANT,
+                DRIVER,
+                15_000_000L,
+                13_000_000L,
+                2_000_000L,
+                "IDR"
+            ),
             EscrowRequestFingerprint.forCreateHold(
-                ORDER, CUSTOMER, MERCHANT, DRIVER, 15_000_000L, 13_000_000L, 2_000_000L, "USD")
+                ORDER,
+                CUSTOMER,
+                MERCHANT,
+                DRIVER,
+                15_000_000L,
+                13_000_000L,
+                2_000_000L,
+                "USD"
+            )
         );
     }
 
@@ -63,9 +105,25 @@ class EscrowRequestFingerprintTest {
     void movingMoneyBetweenTheMerchantAndShippingIsADifferentRequest() {
         assertNotEquals(
             EscrowRequestFingerprint.forCreateHold(
-                ORDER, CUSTOMER, MERCHANT, DRIVER, 15_000_000L, 13_000_000L, 2_000_000L, "IDR"),
+                ORDER,
+                CUSTOMER,
+                MERCHANT,
+                DRIVER,
+                15_000_000L,
+                13_000_000L,
+                2_000_000L,
+                "IDR"
+            ),
             EscrowRequestFingerprint.forCreateHold(
-                ORDER, CUSTOMER, MERCHANT, DRIVER, 15_000_000L, 12_000_000L, 3_000_000L, "IDR")
+                ORDER,
+                CUSTOMER,
+                MERCHANT,
+                DRIVER,
+                15_000_000L,
+                12_000_000L,
+                3_000_000L,
+                "IDR"
+            )
         );
     }
 
@@ -73,9 +131,25 @@ class EscrowRequestFingerprintTest {
     void anAbsentDriverAndABlankDriverAreTheSameRequest() {
         assertEquals(
             EscrowRequestFingerprint.forCreateHold(
-                ORDER, CUSTOMER, MERCHANT, null, 15_000_000L, 13_000_000L, 2_000_000L, "IDR"),
+                ORDER,
+                CUSTOMER,
+                MERCHANT,
+                null,
+                15_000_000L,
+                13_000_000L,
+                2_000_000L,
+                "IDR"
+            ),
             EscrowRequestFingerprint.forCreateHold(
-                ORDER, CUSTOMER, MERCHANT, "", 15_000_000L, 13_000_000L, 2_000_000L, "IDR")
+                ORDER,
+                CUSTOMER,
+                MERCHANT,
+                "",
+                15_000_000L,
+                13_000_000L,
+                2_000_000L,
+                "IDR"
+            )
         );
     }
 
@@ -98,16 +172,31 @@ class EscrowRequestFingerprintTest {
 
     private static String fingerprintOf(BigDecimal total) {
         return EscrowRequestFingerprint.forCreateHold(
-            ORDER, CUSTOMER, MERCHANT, DRIVER, total,
-            new BigDecimal("130000.00"), new BigDecimal("20000.00")
+            ORDER,
+            CUSTOMER,
+            MERCHANT,
+            DRIVER,
+            total,
+            new BigDecimal("130000.00"),
+            new BigDecimal("20000.00")
         );
     }
 
     private static EscrowHold storedHold() {
         return new EscrowHold(
-            42L, ORDER, CUSTOMER, MERCHANT, DRIVER,
-            new BigDecimal("150000.00"), new BigDecimal("130000.00"), new BigDecimal("20000.00"),
-            EscrowHold.EscrowStatus.HELD, Instant.now(), null, null, BigDecimal.ZERO
+            42L,
+            ORDER,
+            CUSTOMER,
+            MERCHANT,
+            DRIVER,
+            new BigDecimal("150000.00"),
+            new BigDecimal("130000.00"),
+            new BigDecimal("20000.00"),
+            EscrowHold.EscrowStatus.HELD,
+            Instant.now(),
+            null,
+            null,
+            BigDecimal.ZERO
         );
     }
 }

@@ -14,6 +14,7 @@ public record PaymentInstructionsResponse(
         ) {
             return null;
         }
+
         return new PaymentInstructionsResponse(
             instructions.bank() == null ? null : instructions.bank().name(),
             instructions.virtualAccountNumber(),

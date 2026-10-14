@@ -68,7 +68,8 @@ class ShippingSettlementIntegrationTest {
         assertEquals(0, driverAvailable(driver).compareTo(SHIPPING));
         assertEquals(0, suspenseBefore.subtract(suspenseAvailable()).compareTo(SHIPPING));
         assertEquals(driver, ledger("escrow:shipping:" + order + ":paid").principalId());
-        assertEquals(SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE,
+        assertEquals(
+            SuspenseWallet.UNASSIGNED_DRIVER_SHIPPING_FEE,
             ledger("escrow:shipping:" + order).principalId()
         );
     }
@@ -102,8 +103,9 @@ class ShippingSettlementIntegrationTest {
 
         assertEquals(0, driverAvailable(driver).compareTo(SHIPPING));
         assertEquals(driver, ledger("escrow:shipping:" + order).principalId());
-        assertTrue(paymentTransactionRepository.findByReferenceNumber("escrow:shipping:" + order + ":paid")
-            .isEmpty()
+        assertTrue(
+            paymentTransactionRepository.findByReferenceNumber("escrow:shipping:" + order + ":paid")
+                .isEmpty()
         );
     }
 
@@ -114,11 +116,25 @@ class ShippingSettlementIntegrationTest {
         holdWithoutADriver(escrow, kept);
         escrow.releaseEscrow(kept);
         String legacy = "ORD-SETTLE-" + UUID.randomUUID();
-        transactionRunner.inNewTransaction(() -> escrowRepository.save(new EscrowHold(
-            null, legacy, UUID.randomUUID().toString(), UUID.randomUUID().toString(), null,
-            TOTAL, MERCHANT_AMOUNT, SHIPPING, EscrowHold.EscrowStatus.RELEASED,
-            Instant.now(), Instant.now(), null, BigDecimal.ZERO
-        )));
+        transactionRunner.inNewTransaction(
+            () -> escrowRepository.save(
+                new EscrowHold(
+                    null,
+                    legacy,
+                    UUID.randomUUID().toString(),
+                    UUID.randomUUID().toString(),
+                    null,
+                    TOTAL,
+                    MERCHANT_AMOUNT,
+                    SHIPPING,
+                    EscrowHold.EscrowStatus.RELEASED,
+                    Instant.now(),
+                    Instant.now(),
+                    null,
+                    BigDecimal.ZERO
+                )
+            )
+        );
         String driver = UUID.randomUUID().toString();
         BigDecimal suspenseBefore = suspenseAvailable();
 
@@ -130,24 +146,48 @@ class ShippingSettlementIntegrationTest {
     }
 
     private EscrowService escrow() {
-        return new EscrowService(escrowRepository, customerWalletRepository, merchantWalletRepository,
-            driverWalletRepository, suspenseWalletRepository, paymentTransactionRepository,
-            idempotencyRepository, transactionRunner, advisoryLock
+        return new EscrowService(
+            escrowRepository,
+            customerWalletRepository,
+            merchantWalletRepository,
+            driverWalletRepository,
+            suspenseWalletRepository,
+            paymentTransactionRepository,
+            idempotencyRepository,
+            transactionRunner,
+            advisoryLock
         );
     }
 
     private void holdWithoutADriver(EscrowService escrow, String order) {
         String customer = UUID.randomUUID().toString();
         String merchant = UUID.randomUUID().toString();
-        transactionRunner.inNewTransaction(() -> customerWalletRepository.save(
-            CustomerWallet.createInitial(customer).topUp(TOTAL)
-        ));
-        escrow.createEscrowHold(new CreateEscrowHoldCommand(order, customer, merchant, null,
-            TOTAL, MERCHANT_AMOUNT, SHIPPING, "k-" + order,
-            EscrowRequestFingerprint.forCreateHold(order, customer, merchant, null,
-                TOTAL, MERCHANT_AMOUNT, SHIPPING
+        transactionRunner.inNewTransaction(
+            () -> customerWalletRepository.save(
+                CustomerWallet.createInitial(customer).topUp(TOTAL)
             )
-        ));
+        );
+        escrow.createEscrowHold(
+            new CreateEscrowHoldCommand(
+                order,
+                customer,
+                merchant,
+                null,
+                TOTAL,
+                MERCHANT_AMOUNT,
+                SHIPPING,
+                "k-" + order,
+                EscrowRequestFingerprint.forCreateHold(
+                    order,
+                    customer,
+                    merchant,
+                    null,
+                    TOTAL,
+                    MERCHANT_AMOUNT,
+                    SHIPPING
+                )
+            )
+        );
     }
 
     private BigDecimal driverAvailable(String driver) {

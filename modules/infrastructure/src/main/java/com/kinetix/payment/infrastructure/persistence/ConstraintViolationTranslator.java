@@ -19,22 +19,27 @@ public final class ConstraintViolationTranslator {
         if (constraint == null) {
             return violation;
         }
+
         if (constraint.equalsIgnoreCase(IDEMPOTENCY_KEY)) {
             return new DuplicateIdempotencyKeyException(
                 "this idempotency key has already been recorded for this operation"
             );
         }
+
         if (constraint.equalsIgnoreCase(TOP_UP_IDEMPOTENCY_KEY)) {
             return new DuplicateIdempotencyKeyException(
                 "this idempotency key has already been used by this customer for a top-up"
             );
         }
+
         if (constraint.equalsIgnoreCase(ESCROW_ORDER_NUMBER)) {
             return new DuplicateOrderNumberException("an escrow hold already exists for this order");
         }
+
         if (constraint.equalsIgnoreCase(TRANSACTION_REFERENCE)) {
             return new DomainException("a payment transaction already records this escrow movement");
         }
+
         return violation;
     }
 
@@ -43,10 +48,12 @@ public final class ConstraintViolationTranslator {
             if (cause instanceof PSQLException postgres && postgres.getServerErrorMessage() != null) {
                 return postgres.getServerErrorMessage().getConstraint();
             }
+
             if (cause.getCause() == cause) {
                 return null;
             }
         }
+
         return null;
     }
 }

@@ -17,12 +17,15 @@ public record EscrowIdempotencyRecord(
         if (operation == null) {
             throw new IllegalArgumentException("An escrow operation is required");
         }
+
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new IllegalArgumentException("An idempotency key is required");
         }
+
         if (orderNumber == null || orderNumber.isBlank()) {
             throw new IllegalArgumentException("An order number is required");
         }
+
         if (requestFingerprint == null || requestFingerprint.isBlank()) {
             throw new IllegalArgumentException("A request fingerprint is required");
         }
@@ -37,15 +40,29 @@ public record EscrowIdempotencyRecord(
         String detail
     ) {
         return new EscrowIdempotencyRecord(
-            null, operation, idempotencyKey, keySource, orderNumber, requestFingerprint,
-            null, detail, Instant.now()
+            null,
+            operation,
+            idempotencyKey,
+            keySource,
+            orderNumber,
+            requestFingerprint,
+            null,
+            detail,
+            Instant.now()
         );
     }
 
     public EscrowIdempotencyRecord appliedTo(Long resolvedEscrowId) {
         return new EscrowIdempotencyRecord(
-            id, operation, idempotencyKey, keySource, orderNumber, requestFingerprint,
-            resolvedEscrowId, detail, createdAt
+            id,
+            operation,
+            idempotencyKey,
+            keySource,
+            orderNumber,
+            requestFingerprint,
+            resolvedEscrowId,
+            detail,
+            createdAt
         );
     }
 

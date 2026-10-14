@@ -15,15 +15,18 @@ public interface PaymentTransactionJpaRepository extends JpaRepository<PaymentTr
 
     Optional<PaymentTransactionJpaEntity> findByPrincipalIdAndIdempotencyKey(String principalId, String idempotencyKey);
 
-    @Query("""
-        SELECT t FROM PaymentTransactionJpaEntity t
-        WHERE t.status = com.kinetix.payment.domain.entity.PaymentTransaction.TransactionStatus.PENDING
-          AND t.type = com.kinetix.payment.domain.entity.PaymentTransaction.TransactionType.TOPUP
-          AND t.createdAt < :olderThan
-        ORDER BY t.createdAt ASC
-        """)
+    @Query(
+        """
+            SELECT t FROM PaymentTransactionJpaEntity t
+            WHERE t.status = com.kinetix.payment.domain.entity.PaymentTransaction.TransactionStatus.PENDING
+              AND t.type = com.kinetix.payment.domain.entity.PaymentTransaction.TransactionType.TOPUP
+              AND t.createdAt < :olderThan
+            ORDER BY t.createdAt ASC
+            """
+    )
     List<PaymentTransactionJpaEntity> findPendingTopUpsOlderThan(
-        @Param("olderThan") Instant olderThan, Limit limit
+        @Param("olderThan") Instant olderThan,
+        Limit limit
     );
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

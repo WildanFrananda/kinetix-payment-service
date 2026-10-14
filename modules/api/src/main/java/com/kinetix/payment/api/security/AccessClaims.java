@@ -3,7 +3,6 @@ package com.kinetix.payment.api.security;
 import org.springframework.security.oauth2.jwt.Jwt;
 
 public record AccessClaims(String principalId, String email, String role) {
-
     public static final String CUSTOMER = "customer";
     public static final String SELLER = "seller";
     public static final String COURIER = "courier";
@@ -21,6 +20,7 @@ public record AccessClaims(String principalId, String email, String role) {
         if (ADMIN.equals(role)) {
             return true;
         }
+
         return role.equals(walletRole)
             && principalId != null
             && principalId.equals(ownerPrincipalId);
@@ -31,7 +31,7 @@ public record AccessClaims(String principalId, String email, String role) {
         if (!(value instanceof String string) || string.isBlank()) {
             throw new MalformedTokenException("claim '" + name + "' is missing or not a string");
         }
+
         return string;
     }
-
 }

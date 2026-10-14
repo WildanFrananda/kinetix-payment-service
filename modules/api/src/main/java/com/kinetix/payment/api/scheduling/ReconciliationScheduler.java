@@ -39,8 +39,11 @@ public class ReconciliationScheduler {
 
     @EventListener(ApplicationReadyEvent.class)
     public void announce() {
-        LOG.info("reconciliation armed: top-ups older than {} every {} (max {} per sweep)",
-            pendingTopUpAge, topUpInterval, topUpBatchSize
+        LOG.info(
+            "reconciliation armed: top-ups older than {} every {} (max {} per sweep)",
+            pendingTopUpAge,
+            topUpInterval,
+            topUpBatchSize
         );
     }
 
@@ -52,6 +55,7 @@ public class ReconciliationScheduler {
         if (draining("top-up reconciliation")) {
             return;
         }
+
         try {
             int concluded = topUps.reconcilePendingTopUps(pendingTopUpAge, topUpBatchSize);
             if (concluded > 0) {
@@ -67,6 +71,7 @@ public class ReconciliationScheduler {
             LOG.info("{} skipped: this instance is shutting down", sweep);
             return true;
         }
+
         return false;
     }
 }

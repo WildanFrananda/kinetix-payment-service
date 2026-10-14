@@ -25,7 +25,8 @@ public class HttpRouteMetricsSeeder {
     private final ObjectProvider<RequestMappingHandlerMapping> mappings;
 
     public HttpRouteMetricsSeeder(
-        MeterRegistry registry, ObjectProvider<RequestMappingHandlerMapping> mappings
+        MeterRegistry registry,
+        ObjectProvider<RequestMappingHandlerMapping> mappings
     ) {
         this.registry = registry;
         this.mappings = mappings;
@@ -66,9 +67,11 @@ public class HttpRouteMetricsSeeder {
             AnnotatedElementUtils.findMergedAnnotation(handler.getMethod(), ResponseStatus.class);
         if (declared == null) {
             declared = AnnotatedElementUtils.findMergedAnnotation(
-                handler.getBeanType(), ResponseStatus.class
+                handler.getBeanType(),
+                ResponseStatus.class
             );
         }
+
         return declared == null ? OK : Integer.toString(declared.code().value());
     }
 

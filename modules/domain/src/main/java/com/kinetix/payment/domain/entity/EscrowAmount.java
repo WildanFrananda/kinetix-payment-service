@@ -9,6 +9,7 @@ final class EscrowAmount {
         if (amount == null || amount.signum() < 0) {
             throw new IllegalArgumentException("an escrow movement cannot be negative or missing: " + amount);
         }
+
         return amount;
     }
 
@@ -19,6 +20,7 @@ final class EscrowAmount {
                 holder + " holds " + pending + " in escrow, which cannot cover " + amount
             );
         }
+
         return pending.subtract(amount);
     }
 }

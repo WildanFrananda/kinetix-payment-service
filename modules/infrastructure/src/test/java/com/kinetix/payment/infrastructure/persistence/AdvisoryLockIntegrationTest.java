@@ -50,7 +50,8 @@ class AdvisoryLockIntegrationTest {
 
         long waited = timeALockAttemptWhile(order, order);
 
-        assertTrue(waited >= HOLD_MILLIS - 400,
+        assertTrue(
+            waited >= HOLD_MILLIS - 400,
             "the second transaction acquired the order lock after " + waited + "ms while another "
                 + "transaction held it for " + HOLD_MILLIS + "ms; it was not serialised"
         );
@@ -62,7 +63,8 @@ class AdvisoryLockIntegrationTest {
 
         long waited = timeALockAttemptWhile(order(), order());
 
-        assertTrue(waited < HOLD_MILLIS / 2,
+        assertTrue(
+            waited < HOLD_MILLIS / 2,
             "locking a different order number waited " + waited + "ms behind an unrelated holder"
         );
     }
@@ -77,17 +79,22 @@ class AdvisoryLockIntegrationTest {
             assertTrue(held.await(5, TimeUnit.SECONDS), "the holder never took the lock");
 
             long startedAt = System.nanoTime();
-            RuntimeException failure = assertThrows(RuntimeException.class, () ->
-                transactionRunner.inNewTransaction(() -> {
-                    advisoryLock.lockOrder(order);
-                    return null;
-                })
+            RuntimeException failure = assertThrows(
+                RuntimeException.class,
+                () ->
+                    transactionRunner.inNewTransaction(() -> {
+                        advisoryLock.lockOrder(order);
+                        return null;
+                    })
             );
             long waited = millisSince(startedAt);
 
-            assertTrue(mentionsLockTimeout(failure),
-                "expected the wait to end at lock_timeout, got: " + describe(failure));
-            assertTrue(waited < 4_500,
+            assertTrue(
+                mentionsLockTimeout(failure),
+                "expected the wait to end at lock_timeout, got: " + describe(failure)
+            );
+            assertTrue(
+                waited < 4_500,
                 "the blocked lock waited " + waited + "ms, which is past the 3s lock_timeout and "
                     + "the 4s transaction budget it is supposed to sit inside"
             );
@@ -112,9 +119,11 @@ class AdvisoryLockIntegrationTest {
             advisoryLock.lockOrder(order);
             return null;
         });
+
         long waited = millisSince(startedAt);
 
-        assertTrue(waited < 500,
+        assertTrue(
+            waited < 500,
             "re-taking the same order lock after a commit waited " + waited + "ms, so the previous "
                 + "transaction never released it"
         );
@@ -122,7 +131,8 @@ class AdvisoryLockIntegrationTest {
 
     @Test
     void anOrderLockTakenOutsideATransactionIsRefused() {
-        IllegalStateException refusal = assertThrows(IllegalStateException.class,
+        IllegalStateException refusal = assertThrows(
+            IllegalStateException.class,
             () -> advisoryLock.lockOrder(order())
         );
 
@@ -131,7 +141,8 @@ class AdvisoryLockIntegrationTest {
 
     @Test
     void aWalletOwnerLockOutsideATransactionIsRefusedToo() {
-        assertThrows(IllegalStateException.class,
+        assertThrows(
+            IllegalStateException.class,
             () -> advisoryLock.lockWalletOwner(UUID.randomUUID().toString())
         );
     }
@@ -153,11 +164,13 @@ class AdvisoryLockIntegrationTest {
                         advisoryLock.lockOrder(lockedOrder);
                         return null;
                     });
+
                     waited.set(millisSince(startedAt));
                 } catch (Throwable error) {
                     failed.set(error);
                 }
             });
+
             waiter.start();
 
             Thread.sleep(HOLD_MILLIS);
@@ -167,6 +180,7 @@ class AdvisoryLockIntegrationTest {
             if (failed.get() != null) {
                 throw new AssertionError("the waiting transaction failed", failed.get());
             }
+
             assertTrue(waited.get() >= 0, "the waiting transaction never finished");
             return waited.get();
         } finally {
@@ -184,6 +198,7 @@ class AdvisoryLockIntegrationTest {
                     statement.setString(2, orderNumber);
                     statement.execute();
                 }
+
                 held.countDown();
                 release.await(30, TimeUnit.SECONDS);
                 connection.rollback();
@@ -192,6 +207,7 @@ class AdvisoryLockIntegrationTest {
                 throw new IllegalStateException("the holder could not take the lock", error);
             }
         });
+
         holder.setDaemon(true);
         holder.start();
         return holder;
@@ -209,10 +225,12 @@ class AdvisoryLockIntegrationTest {
             if (cause.getMessage() != null && cause.getMessage().contains("lock timeout")) {
                 return true;
             }
+
             if (cause.getCause() == cause) {
                 return false;
             }
         }
+
         return false;
     }
 
@@ -223,8 +241,10 @@ class AdvisoryLockIntegrationTest {
             if (cause.getCause() == cause) {
                 break;
             }
+
             chain.append(" <- ");
         }
+
         return chain.toString();
     }
 
