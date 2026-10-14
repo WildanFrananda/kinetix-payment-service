@@ -2,18 +2,23 @@ package com.kinetix.payment.application;
 
 import com.kinetix.payment.domain.entity.LiabilityAccount;
 import com.kinetix.payment.domain.entity.LiabilityHolder;
+import com.kinetix.payment.domain.entity.MinorUnits;
 import com.kinetix.payment.domain.port.LiabilitySnapshotVisitor;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.UUID;
 
 final class LiabilitySnapshotTally implements LiabilitySnapshotVisitor {
+    private final UUID snapshotId;
     private final String currency;
     private final LiabilitySnapshotSink sink;
+    private final LiabilitySnapshotDigest digest = new LiabilitySnapshotDigest();
     private Instant asOf;
     private long accountCount;
     private BigDecimal total = BigDecimal.ZERO;
 
-    LiabilitySnapshotTally(String currency, LiabilitySnapshotSink sink) {
+    LiabilitySnapshotTally(UUID snapshotId, String currency, LiabilitySnapshotSink sink) {
+        this.snapshotId = snapshotId;
         this.currency = currency;
         this.sink = sink;
     }
@@ -29,7 +34,7 @@ final class LiabilitySnapshotTally implements LiabilitySnapshotVisitor {
         }
 
         asOf = moment;
-        sink.begin(moment, currency);
+        sink.begin(snapshotId, moment, currency);
     }
 
     @Override
@@ -48,6 +53,7 @@ final class LiabilitySnapshotTally implements LiabilitySnapshotVisitor {
 
             accountCount++;
             total = total.add(account.balance());
+            digest.add(account);
             sink.account(account);
         }
     }
@@ -57,6 +63,13 @@ final class LiabilitySnapshotTally implements LiabilitySnapshotVisitor {
             throw new IllegalStateException("the snapshot finished without ever being dated");
         }
 
-        return new LiabilitySnapshotTotals(asOf, currency, accountCount, total);
+        return new LiabilitySnapshotTotals(
+            snapshotId,
+            asOf,
+            currency,
+            accountCount,
+            total,
+            digest.digest(asOf, currency, accountCount, MinorUnits.of(total))
+        );
     }
 }

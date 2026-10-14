@@ -2,6 +2,7 @@ package com.kinetix.payment.api.config;
 
 import tools.jackson.databind.json.JsonMapper;
 import com.kinetix.payment.application.EscrowService;
+import com.kinetix.payment.application.LiabilitySnapshotRecordService;
 import com.kinetix.payment.application.LiabilitySnapshotService;
 import com.kinetix.payment.application.TopUpService;
 import com.kinetix.payment.application.WalletService;
@@ -59,8 +60,18 @@ public class BeanConfig {
     }
 
     @Bean
-    public LiabilitySnapshotService liabilitySnapshotService(LiabilitySnapshotPort liabilitySnapshots) {
-        return new LiabilitySnapshotService(liabilitySnapshots);
+    public LiabilitySnapshotService liabilitySnapshotService(
+        LiabilitySnapshotPort liabilitySnapshots,
+        LiabilitySnapshotRecordPort liabilitySnapshotRecords
+    ) {
+        return new LiabilitySnapshotService(liabilitySnapshots, liabilitySnapshotRecords);
+    }
+
+    @Bean
+    public LiabilitySnapshotRecordService liabilitySnapshotRecordService(
+        LiabilitySnapshotRecordPort liabilitySnapshotRecords
+    ) {
+        return new LiabilitySnapshotRecordService(liabilitySnapshotRecords);
     }
 
     @Bean

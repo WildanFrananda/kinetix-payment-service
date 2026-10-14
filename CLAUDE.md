@@ -77,6 +77,23 @@ The notary never reads this database; this RPC is the whole interface. What it p
   up after 30 seconds without progress so a stalled reader cannot hold the transaction open. Postgres
   backs that with `statement_timeout` 120s and `idle_in_transaction_session_timeout` 60s.
 
+### Every snapshot is recorded, for the notary's watch
+
+Since notary step 8 (2026-10-14) each snapshot has a `snapshot_id`, sent in the header, and a `digest`,
+sent in the trailer. Before the trailer goes out, payment writes `liability_snapshot_records`: id, `as_of`,
+currency, count, total and digest. If the record cannot be written there is no trailer, so a snapshot the
+notary can use always has one. `payment.v1.LiabilityRecordService/GetLiabilitySnapshotRecord` serves it to
+the notary's watch, which checks the rows the notary forwards against payment's own record rather than
+against anything the notary says. The watch is the only caller: `notary-watch@payment.v1.LiabilityRecordService`.
+
+The digest is SHA-256 over `"kinetix.payment.liability-snapshot.v1" ‖ as_of seconds:u64 ‖ as_of
+nanos:u32 ‖ currency ‖ count:u64 ‖ total:u64`, then every account sorted by kind code and then by the
+holder's UTF-8 bytes, each as `kind:u8 ‖ holderLength:u8 ‖ holder ‖ amount:u64`, all big-endian, amounts
+in the same minor units the stream sends (`MinorUnits`, shared by both). The order is canonical so a
+reader can rebuild it from rows in any order; a holder longer than 255 bytes refuses the snapshot. The
+known-answer vector in `LiabilitySnapshotDigestTest` was computed by an independent Python
+implementation, and the notary's Go tests assert the same value.
+
 ### Callers are scoped per service
 
 `GRPC_ALLOWED_CALLERS` takes `caller` (every service on this server) or `caller@package.Service`
