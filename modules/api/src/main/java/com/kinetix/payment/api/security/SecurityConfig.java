@@ -50,7 +50,7 @@ public class SecurityConfig {
         @Value("${kinetix.jwt.issuer}") String issuer,
         @Value("${kinetix.jwt.audience}") String audience
     ) {
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwksUri)
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSource(RateLimitedKeys.fetchedFrom(jwksUri))
             .jwsAlgorithm(SignatureAlgorithm.RS256)
             .build();
 

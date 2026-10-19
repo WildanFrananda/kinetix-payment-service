@@ -126,3 +126,12 @@ Boot 3.5's last release carries Spring Framework 6.2.19, which has two critical 
 `modules/api/build.gradle` also pins Tomcat 11.0.26 and Jackson 3.1.7 over Boot 4.1.1's 11.0.24 and 3.1.5,
 which carried three critical and five high CVEs on 2026-10-10. Drop each pin once a Boot release manages
 that version or later; leaving one behind makes this service lag every later fix.
+
+## An unknown signing key is looked for at most twice every ten seconds
+
+`SecurityConfig` builds its decoder on `RateLimitedKeys`, a Nimbus `JWKSourceBuilder` source rate-limited to
+`UNKNOWN_KEY_REFRESH` (ten seconds; Nimbus allows two fetches per interval), not on `withJwkSetUri`, because
+Spring Security 7 builds that source with `rateLimited(false)`. Until 2026-10-19 every token with an unknown
+`kid` fetched identity's JWKS, so forged tokens with made-up key ids made identity answer once per request.
+When the limit is reached `RateLimitedKeys` answers "no key", which Spring reports as a bad token (`401`);
+Nimbus's own `RateLimitReachedException` would have surfaced as a decoding error, a `500`.
