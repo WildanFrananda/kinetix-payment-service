@@ -1,6 +1,8 @@
 package com.kinetix.payment.domain.entity;
 
+import com.kinetix.payment.domain.gateway.VirtualAccountBank;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 
 public record PaymentTransaction(
@@ -14,8 +16,12 @@ public record PaymentTransaction(
     TransactionStatus status,
     String gatewayResponse,
     Instant createdAt,
-    String idempotencyKey
+    String idempotencyKey,
+    VirtualAccountBank bank,
+    AttentionReason attentionReason
 ) {
+    private static final int LEDGER_SCALE = 2;
+
     public enum TransactionType {
         TOPUP,
         CHECKOUT_PAYMENT,
@@ -35,7 +41,8 @@ public record PaymentTransaction(
         PENDING,
         SUCCESS,
         FAILED,
-        EXPIRED
+        EXPIRED,
+        NEEDS_ATTENTION
     }
 
     public static PaymentTransaction pendingTopUp(
@@ -43,6 +50,7 @@ public record PaymentTransaction(
         String principalId,
         String idempotencyKey,
         PaymentMethod method,
+        VirtualAccountBank bank,
         BigDecimal amount
     ) {
         return new PaymentTransaction(
@@ -52,12 +60,18 @@ public record PaymentTransaction(
             principalId,
             TransactionType.TOPUP,
             method,
-            amount,
+            amount.setScale(LEDGER_SCALE, RoundingMode.UNNECESSARY),
             TransactionStatus.PENDING,
             null,
             Instant.now(),
-            idempotencyKey
+            idempotencyKey,
+            bank,
+            null
         );
+    }
+
+    public boolean hasGatewayAnswer() {
+        return gatewayResponse != null;
     }
 
     public PaymentTransaction withGatewayResponse(String gatewayTransactionId, String response) {
@@ -72,7 +86,9 @@ public record PaymentTransaction(
             status,
             response,
             createdAt,
-            idempotencyKey
+            idempotencyKey,
+            bank,
+            attentionReason
         );
     }
 
@@ -81,16 +97,47 @@ public record PaymentTransaction(
         String gatewayTransactionId,
         String response
     ) {
-        if (status != TransactionStatus.PENDING) {
-            throw new IllegalStateException(
-                "transaction " + referenceNumber + " is already " + status + " and cannot become " + outcome
-            );
-        }
+        requirePending(outcome);
 
         if (outcome == TransactionStatus.PENDING) {
             throw new IllegalArgumentException("a transaction concludes as something other than pending");
         }
 
+        if (outcome == TransactionStatus.NEEDS_ATTENTION) {
+            throw new IllegalArgumentException("a transaction is set aside for attention with a reason");
+        }
+
+        return concluded(outcome, null, gatewayTransactionId, response);
+    }
+
+    public PaymentTransaction setAsideFor(
+        AttentionReason reason,
+        String gatewayTransactionId,
+        String response
+    ) {
+        requirePending(TransactionStatus.NEEDS_ATTENTION);
+
+        if (reason == null) {
+            throw new IllegalArgumentException("a transaction set aside for attention needs a reason");
+        }
+
+        return concluded(TransactionStatus.NEEDS_ATTENTION, reason, gatewayTransactionId, response);
+    }
+
+    private void requirePending(TransactionStatus next) {
+        if (status != TransactionStatus.PENDING) {
+            throw new IllegalStateException(
+                "transaction " + referenceNumber + " is already " + status + " and cannot become " + next
+            );
+        }
+    }
+
+    private PaymentTransaction concluded(
+        TransactionStatus outcome,
+        AttentionReason reason,
+        String gatewayTransactionId,
+        String response
+    ) {
         return new PaymentTransaction(
             id,
             referenceNumber,
@@ -102,7 +149,9 @@ public record PaymentTransaction(
             outcome,
             response != null ? response : gatewayResponse,
             createdAt,
-            idempotencyKey
+            idempotencyKey,
+            bank,
+            reason
         );
     }
 }

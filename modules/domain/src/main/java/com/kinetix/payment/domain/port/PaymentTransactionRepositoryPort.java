@@ -14,5 +14,7 @@ public interface PaymentTransactionRepositoryPort {
 
     List<PaymentTransaction> findPendingTopUpsOlderThan(Instant olderThan, int limit);
 
+    void markChecked(String referenceNumber, Instant checkedAt);
+
     PaymentTransaction save(PaymentTransaction transaction);
 }

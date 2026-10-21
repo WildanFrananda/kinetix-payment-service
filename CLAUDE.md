@@ -133,5 +133,87 @@ that version or later; leaving one behind makes this service lag every later fix
 `UNKNOWN_KEY_REFRESH` (ten seconds; Nimbus allows two fetches per interval), not on `withJwkSetUri`, because
 Spring Security 7 builds that source with `rateLimited(false)`. Until 2026-10-19 every token with an unknown
 `kid` fetched identity's JWKS, so forged tokens with made-up key ids made identity answer once per request.
-When the limit is reached `RateLimitedKeys` answers "no key", which Spring reports as a bad token (`401`);
-Nimbus's own `RateLimitReachedException` would have surfaced as a decoding error, a `500`.
+When the limit is reached `RateLimitedKeys` answers "no key", which Spring reports as a bad token (`401`),
+but only while the last fetch succeeded. `ObservedKeySetSource` records whether the last fetch from identity
+failed; if it did, a rate-limited lookup is "identity is down", not "this key is forged", and answers
+unavailable. Until 2026-10-21 an identity outage read as `401` for every request after the first two.
+
+## HTTP failures keep their meaning
+
+Proven on 2026-10-21 by `HttpFailuresThroughTheFilterChainTest` and `IdentityOutageThroughTheFilterChainTest`,
+which run the real filter chain on a real Tomcat (`HttpFailureProbeApplication`; MockMvc never makes the
+container's `ERROR` dispatch, so it cannot see this). Before the fix the anonymous Midtrans webhook answered
+an **empty 401** for a body that is not JSON, a database outage and any unexpected failure, and every request
+answered an empty 401 while identity's JWKS was unreachable: Spring renders those through `/error`, and
+`/error` required a token. What holds now:
+
+- `SecurityConfig` permits the `ERROR` dispatch, so a failure reaches the client with its own status.
+- `GlobalExceptionHandler` extends `ResponseEntityExceptionHandler`, so every Spring MVC exception (missing
+  header, unreadable body, failed validation, 405, 415, …) answers its status in the `{"error": …}` shape.
+- A ledger outage (`CannotCreateTransactionException`, `DataAccessResourceFailureException`, transient and
+  recoverable data-access failures, a transaction timeout) is `503`. Other data-access errors stay `500`: a
+  constraint the code did not expect is a defect, not an outage.
+- `AuthenticationRefusals` writes `401` for a missing or bad token and `503` when the token could not be
+  checked (`AuthenticationServiceException`, which Spring raises for a JWKS outage and would otherwise rethrow
+  as a `500`).
+- `ErrorResponseController` replaces Boot's `/error` page, so whatever still reaches the container (an
+  exception nothing mapped, a `sendError` from a filter) answers its status as `{"error": …}`, and a `500`
+  never carries the exception's text.
+- Hikari waits at most 3 s for a connection (`spring.datasource.hikari.connection-timeout`). Its default,
+  30 s, held every request for half a minute before the `503` during an outage; 3 s was measured with
+  Postgres stopped under the running jar on 2026-10-21.
+
+`JsonConfiguration` holds the one `JsonMapper` on its own so that probe context can load the production mapper
+without the service beans.
+
+## Top-up limits, and top-ups set aside for a person
+
+The user ruled on 2026-10-21: a customer top-up is at most IDR 2,000,000 and a customer wallet holds at most
+IDR 2,000,000 (`TOP_UP_MAXIMUM_AMOUNT`, `CUSTOMER_WALLET_MAXIMUM_BALANCE`, required, checked by `TopUpLimits`
+at start). Both are checked before Midtrans is called and refused with `422` and a `code`
+(`TOP_UP_AMOUNT_ABOVE_LIMIT`, `WALLET_BALANCE_LIMIT_EXCEEDED`). A replay is never refused by them: its first
+request already passed. They limit what enters from outside: merchant and driver wallets, and refunds into a
+customer wallet, are not capped, because a refund returns the buyer's own money.
+
+The balance check is on the balance at charge time, so two top-ups started together can both be paid and the
+second no longer fits. A settlement that cannot be credited is never left `PENDING`: it becomes
+`NEEDS_ATTENTION` with an `attention_reason`, leaves the sweep (which reads only `PENDING`), logs an error and
+counts `kinetix_payment_top_ups_needing_attention_total{reason}`. The reasons:
+
+- `BALANCE_LIMIT_EXCEEDED`: crediting it would take the wallet over its limit.
+- `AMOUNT_MISMATCH`: the gateway settled another amount than was charged.
+- `GATEWAY_HAS_NO_RECORD`: the gateway accepted the charge and, after the grace, no longer knows it.
+
+A charge that never got an answer and that the gateway still does not know after
+`kinetix.reconciliation.not-found-grace` (1h in `application.yml`, counted from creation) never reached it,
+and is concluded `FAILED`. Inside the grace it stays `PENDING`. Only the sweep concludes it; a notification never does.
+Resolving a set-aside top-up (refund at Midtrans, or credit once the wallet has room) is a person's decision
+and has no endpoint yet: it belongs to the planned backoffice, built here as an API when it is needed.
+
+Before this the sweep took the oldest 100 `PENDING` rows and these rows stayed `PENDING`, throwing `409` on
+every sweep, so 100 of them blocked every newer lost notification.
+
+Top-ups the customer abandoned stay `PENDING` at the gateway until it expires them, so they could hold the
+same window. Every time the gateway is asked about a top-up, `last_checked_at` is set (an update of that
+column alone, never through `save()`, which would write a stale copy over it), and the sweep takes rows never
+asked first, then the least recently asked. `aLostNotificationIsReachedWhileOlderAbandonedTopUpsStillFillTheBatch`
+fails with the old `ORDER BY created_at`.
+
+## The charge reply is written under the row's lock
+
+`conclude()` re-reads the top-up `FOR UPDATE` and writes the gateway's reply only while it is still
+`PENDING`. It used to save its in-memory copy, which set a top-up the notification had settled meanwhile back
+to `PENDING`; the next sweep then credited it again. `TopUpLedgerIntegrationTest` proved it on Postgres: one
+paid top-up of 150,000 left the wallet holding 300,000.
+
+A replay compares type, method, bank and amount. Whether the gateway answered is `gateway_response` being set,
+not `external_transaction_id`: an accepted charge with no transaction id used to answer every retry `503`.
+
+## A balance read opens nothing
+
+`GET …/wallet/{customer,merchant,driver}/balance` reads and never writes. An absent wallet answers zero
+balances with `"exists": false`; a wallet is opened by the first money that reaches it (a settled top-up or an
+escrow movement), which is how order's escrow calls already treat an absent wallet. A principal with no wallet
+is therefore not in a liability snapshot until money reaches it. Admins hold no wallet: a token whose role is
+not the wallet's kind is `403`, so an admin can neither open a wallet nor top up under its own principal. No
+endpoint reads another principal's wallet; that is the backoffice's, when it exists.

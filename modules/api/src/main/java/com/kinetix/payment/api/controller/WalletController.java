@@ -32,7 +32,8 @@ public class WalletController {
     @GetMapping("/customer/balance")
     public ResponseEntity<WalletResponse> getCustomerBalance(@AuthenticationPrincipal Jwt jwt) {
         AccessClaims caller = require(jwt, AccessClaims.CUSTOMER);
-        CustomerWallet wallet = walletService.getCustomerWallet(caller.principalId());
+        CustomerWallet wallet = walletService.findCustomerWallet(caller.principalId())
+            .orElseGet(() -> CustomerWallet.createInitial(caller.principalId()));
         return ResponseEntity.ok(WalletResponse.fromCustomer(wallet));
     }
 
@@ -69,22 +70,24 @@ public class WalletController {
     @GetMapping("/merchant/balance")
     public ResponseEntity<WalletResponse> getMerchantBalance(@AuthenticationPrincipal Jwt jwt) {
         AccessClaims caller = require(jwt, AccessClaims.SELLER);
-        MerchantWallet wallet = walletService.getMerchantWallet(caller.principalId());
+        MerchantWallet wallet = walletService.findMerchantWallet(caller.principalId())
+            .orElseGet(() -> MerchantWallet.createInitial(caller.principalId()));
         return ResponseEntity.ok(WalletResponse.fromMerchant(wallet));
     }
 
     @GetMapping("/driver/balance")
     public ResponseEntity<WalletResponse> getDriverBalance(@AuthenticationPrincipal Jwt jwt) {
         AccessClaims caller = require(jwt, AccessClaims.COURIER);
-        DriverWallet wallet = walletService.getDriverWallet(caller.principalId());
+        DriverWallet wallet = walletService.findDriverWallet(caller.principalId())
+            .orElseGet(() -> DriverWallet.createInitial(caller.principalId()));
         return ResponseEntity.ok(WalletResponse.fromDriver(wallet));
     }
 
     private AccessClaims require(Jwt jwt, String role) {
         AccessClaims caller = AccessClaims.of(jwt);
-        if (!caller.mayActOn(role, caller.principalId())) {
+        if (!caller.holds(role)) {
             throw new ForbiddenException(
-                "this account is a " + caller.role() + " and holds no " + role + " wallet"
+                "an account whose role is " + caller.role() + " holds no " + role + " wallet"
             );
         }
 

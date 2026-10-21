@@ -25,6 +25,8 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-timeout: 3000
   liquibase:
     enabled: false
   jpa:
@@ -40,8 +42,8 @@ midtrans:
   base-url: ${MIDTRANS_BASE_URL}
   # Both sides bounded. The adapter used to set a connect timeout and nothing else, so a gateway that
   # accepted the connection and never answered held a request thread for as long as it liked.
-  connect-timeout-ms: ${MIDTRANS_CONNECT_TIMEOUT_MS:5000}
-  request-timeout-ms: ${MIDTRANS_REQUEST_TIMEOUT_MS:15000}
+  connect-timeout-ms: 5000
+  request-timeout-ms: 15000
 
 # The identity service is the only thing on this platform that may sign a token. Every value
 # here is required with no default: a fallback issuer or audience would mean a misconfigured
@@ -64,6 +66,9 @@ kinetix:
     jwks-uri: ${IDENTITY_JWKS_URL}
     issuer: ${JWT_ISSUER}
     audience: ${JWT_AUDIENCE}
+  top-up:
+    maximum-amount: ${TOP_UP_MAXIMUM_AMOUNT}
+    maximum-customer-balance: ${CUSTOMER_WALLET_MAXIMUM_BALANCE}
   grpc:
     # Which services may call this server. mTLS proves a peer holds a certificate from our CA,
     # which every service does; this is what makes the surface narrow. `caller@package.Service`
@@ -86,6 +91,7 @@ kinetix:
     top-up-batch-size: ${RECONCILIATION_TOPUP_BATCH_SIZE:100}
     # The sweep waits out startup rather than running against a context that is still wiring itself.
     top-up-initial-delay: ${RECONCILIATION_TOPUP_INITIAL_DELAY:60s}
+    not-found-grace: 1h
 
 spring.grpc:
   server:

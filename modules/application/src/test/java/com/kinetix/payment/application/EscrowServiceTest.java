@@ -757,6 +757,8 @@ class EscrowServiceTest {
                         PaymentTransaction.TransactionStatus.SUCCESS,
                         null,
                         Instant.now(),
+                        null,
+                        null,
                         null
                     )
                 )

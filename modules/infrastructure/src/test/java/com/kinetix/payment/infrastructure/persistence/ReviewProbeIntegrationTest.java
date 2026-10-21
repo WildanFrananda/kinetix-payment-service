@@ -3,6 +3,7 @@ package com.kinetix.payment.infrastructure.persistence;
 import com.kinetix.payment.application.CreateEscrowHoldCommand;
 import com.kinetix.payment.application.EscrowRequestFingerprint;
 import com.kinetix.payment.application.EscrowService;
+import com.kinetix.payment.application.TopUpLimits;
 import com.kinetix.payment.application.TopUpService;
 import com.kinetix.payment.application.WalletService;
 import com.kinetix.payment.domain.entity.CustomerWallet;
@@ -15,6 +16,7 @@ import com.kinetix.payment.domain.gateway.GatewayNotification;
 import com.kinetix.payment.domain.gateway.GatewaySettlement;
 import com.kinetix.payment.domain.gateway.GatewayStatus;
 import com.kinetix.payment.domain.gateway.PaymentInstructions;
+import com.kinetix.payment.domain.gateway.VirtualAccountBank;
 import com.kinetix.payment.domain.port.PaymentGatewayPort;
 import com.kinetix.payment.domain.port.TransactionRunnerPort;
 import com.kinetix.payment.domain.port.AdvisoryLockPort;
@@ -56,6 +58,7 @@ class ReviewProbeIntegrationTest {
     private static final BigDecimal TOTAL = new BigDecimal("150000.00");
     private static final BigDecimal MERCHANT_AMOUNT = new BigDecimal("130000.00");
     private static final BigDecimal SHIPPING = new BigDecimal("20000.00");
+    private static final BigDecimal LEDGER_CEILING = new BigDecimal("9999999999");
 
     @Autowired private TransactionRunnerPort transactionRunner;
     @Autowired private AdvisoryLockPort advisoryLock;
@@ -82,13 +85,7 @@ class ReviewProbeIntegrationTest {
     }
 
     private WalletService wallets() {
-        return new WalletService(
-            customerWalletRepository,
-            merchantWalletRepository,
-            driverWalletRepository,
-            transactionRunner,
-            advisoryLock
-        );
+        return new WalletService(customerWalletRepository, merchantWalletRepository, driverWalletRepository);
     }
 
     private TopUpService settlementService() {
@@ -122,7 +119,9 @@ class ReviewProbeIntegrationTest {
             customerWalletRepository,
             paidInFull,
             transactionRunner,
-            advisoryLock
+            advisoryLock,
+            new TopUpLimits(LEDGER_CEILING, LEDGER_CEILING),
+            setAside -> {}
         );
     }
 
@@ -135,6 +134,7 @@ class ReviewProbeIntegrationTest {
                     principalId,
                     "probe:" + UUID.randomUUID(),
                     PaymentTransaction.PaymentMethod.MIDTRANS_VA,
+                    VirtualAccountBank.BCA,
                     amount
                 )
             )
@@ -435,8 +435,8 @@ class ReviewProbeIntegrationTest {
                                 }
                                 case 2 -> settlements.settle(pendingTopUp(c, new BigDecimal("500.00")));
                                 default -> {
-                                    wallets.getMerchantWallet(m);
-                                    wallets.getDriverWallet(d);
+                                    wallets.findMerchantWallet(m);
+                                    wallets.findDriverWallet(d);
                                 }
                             }
                         } catch (RuntimeException failure) {
@@ -520,7 +520,7 @@ class ReviewProbeIntegrationTest {
                     reading.add(pool.submit(() -> {
                         gate.await(10, TimeUnit.SECONDS);
                         try {
-                            wallets.getMerchantWallet(merchant);
+                            wallets.findMerchantWallet(merchant);
                             return "read:ok";
                         } catch (RuntimeException failure) {
                             return "read:" + failure.getClass().getSimpleName()

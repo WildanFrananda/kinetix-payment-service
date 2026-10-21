@@ -334,6 +334,8 @@ class EscrowPersistenceIntegrationTest {
             PaymentTransaction.TransactionStatus.SUCCESS,
             null,
             Instant.now(),
+            null,
+            null,
             null
         );
     }

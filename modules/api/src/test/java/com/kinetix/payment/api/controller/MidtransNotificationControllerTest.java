@@ -9,6 +9,7 @@ import com.kinetix.payment.domain.entity.PaymentTransaction.TransactionStatus;
 import com.kinetix.payment.domain.exception.GatewayUnavailableException;
 import com.kinetix.payment.domain.exception.TopUpNotFoundException;
 import com.kinetix.payment.domain.gateway.GatewayNotification;
+import com.kinetix.payment.domain.gateway.VirtualAccountBank;
 import com.kinetix.payment.domain.port.PaymentGatewayPort;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,7 +66,14 @@ class MidtransNotificationControllerTest {
     void anAuthenticNotificationOnlyTriggersSettlementAndIsCheckedAgainstTheSignedFieldsVerbatim() throws Exception {
         when(gateway.isAuthentic(any())).thenReturn(true);
         PaymentTransaction settled = PaymentTransaction
-            .pendingTopUp("TOPUP-1", "customer", "k", PaymentMethod.MIDTRANS_VA, new BigDecimal("50000"))
+            .pendingTopUp(
+                "TOPUP-1",
+                "customer",
+                "k",
+                PaymentMethod.MIDTRANS_VA,
+                VirtualAccountBank.BCA,
+                new BigDecimal("50000")
+            )
             .concludedAs(TransactionStatus.SUCCESS, "be03df7d", "{}");
         when(topUpService.settle("TOPUP-1")).thenReturn(new SettlementOutcome(settled, true));
 

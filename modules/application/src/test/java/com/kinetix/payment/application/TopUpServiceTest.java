@@ -1,5 +1,6 @@
 package com.kinetix.payment.application;
 
+import com.kinetix.payment.domain.entity.AttentionReason;
 import com.kinetix.payment.domain.entity.CustomerWallet;
 import com.kinetix.payment.domain.entity.PaymentTransaction;
 import com.kinetix.payment.domain.entity.PaymentTransaction.PaymentMethod;
@@ -9,7 +10,7 @@ import com.kinetix.payment.domain.exception.DuplicateIdempotencyKeyException;
 import com.kinetix.payment.domain.exception.GatewayRefusedException;
 import com.kinetix.payment.domain.exception.GatewayUnavailableException;
 import com.kinetix.payment.domain.exception.IdempotencyConflictException;
-import com.kinetix.payment.domain.exception.SettlementMismatchException;
+import com.kinetix.payment.domain.exception.TopUpLimitExceededException;
 import com.kinetix.payment.domain.exception.TopUpNotFoundException;
 import com.kinetix.payment.domain.gateway.GatewayCharge;
 import com.kinetix.payment.domain.gateway.GatewayChargeOutcome;
@@ -22,10 +23,13 @@ import com.kinetix.payment.domain.port.AdvisoryLockPort;
 import com.kinetix.payment.domain.port.CustomerWalletRepositoryPort;
 import com.kinetix.payment.domain.port.PaymentGatewayPort;
 import com.kinetix.payment.domain.port.PaymentTransactionRepositoryPort;
+import com.kinetix.payment.domain.port.TopUpAlarmPort;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,8 +43,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -55,12 +62,16 @@ class TopUpServiceTest {
     private static final String REFERENCE = "TOPUP-ref";
     private static final BigDecimal AMOUNT = new BigDecimal("50000.00");
     private static final String VA_RESPONSE = "{\"status_code\":\"201\",\"transaction_status\":\"pending\"}";
+    private static final BigDecimal LIMIT = new BigDecimal("2000000");
+    private static final Duration GRACE = Duration.ofHours(1);
 
     private PaymentTransactionRepositoryPort transactions;
     private CustomerWalletRepositoryPort customerWallets;
     private PaymentGatewayPort gateway;
     private AdvisoryLockPort advisoryLock;
     private CountingTransactionRunner transactionRunner;
+    private TopUpAlarmPort alarm;
+    private Map<String, PaymentTransaction> rows;
     private TopUpService service;
 
     @BeforeEach
@@ -70,12 +81,29 @@ class TopUpServiceTest {
         gateway = mock(PaymentGatewayPort.class);
         advisoryLock = mock(AdvisoryLockPort.class);
         transactionRunner = new CountingTransactionRunner();
+        alarm = mock(TopUpAlarmPort.class);
+        rows = new HashMap<>();
 
-        when(transactions.save(any())).thenAnswer(call -> call.getArgument(0));
+        when(transactions.save(any())).thenAnswer(call -> {
+            PaymentTransaction saved = call.getArgument(0);
+            rows.put(saved.referenceNumber(), saved);
+            return saved;
+        });
+
+        when(transactions.findByReferenceNumberForUpdate(anyString()))
+            .thenAnswer(call -> Optional.ofNullable(rows.get(call.<String>getArgument(0))));
         when(customerWallets.save(any())).thenAnswer(call -> call.getArgument(0));
         when(transactions.findByPrincipalIdAndIdempotencyKey(any(), any())).thenReturn(Optional.empty());
 
-        service = new TopUpService(transactions, customerWallets, gateway, transactionRunner, advisoryLock);
+        service = new TopUpService(
+            transactions,
+            customerWallets,
+            gateway,
+            transactionRunner,
+            advisoryLock,
+            new TopUpLimits(LIMIT, LIMIT),
+            alarm
+        );
     }
 
     @Test
@@ -95,7 +123,7 @@ class TopUpServiceTest {
     }
 
     @Test
-    void anAcceptedChargeAnswersWithHowToPayAndDoesNotTouchAnyWallet() {
+    void anAcceptedChargeAnswersWithHowToPayAndCreditsNothing() {
         when(gateway.charge(any())).thenReturn(accepted());
 
         TopUpOutcome outcome = service.requestTopUp(vaTopUp());
@@ -104,7 +132,8 @@ class TopUpServiceTest {
         assertEquals("mid-tx-1", outcome.transaction().externalTransactionId());
         assertEquals("12345678901", outcome.instructions().virtualAccountNumber());
         assertFalse(outcome.replayed());
-        verifyNoInteractions(customerWallets);
+        verify(customerWallets, never()).save(any());
+        verify(customerWallets, never()).findByCustomerPrincipalIdForUpdate(any());
     }
 
     @Test
@@ -133,7 +162,7 @@ class TopUpServiceTest {
         assertThrows(GatewayRefusedException.class, () -> service.requestTopUp(vaTopUp()));
 
         verify(transactions).save(argThat((PaymentTransaction t) -> t.status() == TransactionStatus.FAILED));
-        verifyNoInteractions(customerWallets);
+        verify(customerWallets, never()).save(any());
     }
 
     @Test
@@ -153,7 +182,7 @@ class TopUpServiceTest {
 
         assertTrue(unavailable.referenceNumber().startsWith("TOPUP-"));
         verify(transactions, never()).save(argThat((PaymentTransaction t) -> t.status() != TransactionStatus.PENDING));
-        verifyNoInteractions(customerWallets);
+        verify(customerWallets, never()).save(any());
     }
 
     @Test
@@ -186,7 +215,14 @@ class TopUpServiceTest {
     void aReplayOfAChargeThatNeverGotAnAnswerIsStillUnavailableRatherThanAFreshCharge() {
         when(transactions.findByPrincipalIdAndIdempotencyKey(CUSTOMER, KEY)).thenReturn(
             Optional.of(
-                PaymentTransaction.pendingTopUp("TOPUP-first", CUSTOMER, KEY, PaymentMethod.MIDTRANS_VA, AMOUNT)
+                PaymentTransaction.pendingTopUp(
+                    "TOPUP-first",
+                    CUSTOMER,
+                    KEY,
+                    PaymentMethod.MIDTRANS_VA,
+                    VirtualAccountBank.BCA,
+                    AMOUNT
+                )
             )
         );
 
@@ -200,7 +236,7 @@ class TopUpServiceTest {
         PaymentTransaction winner = charged("TOPUP-winner", AMOUNT);
         when(transactions.findByPrincipalIdAndIdempotencyKey(CUSTOMER, KEY))
             .thenReturn(Optional.empty(), Optional.of(winner));
-        when(transactions.save(any())).thenThrow(new DuplicateIdempotencyKeyException("taken"));
+        doThrow(new DuplicateIdempotencyKeyException("taken")).when(transactions).save(any());
 
         TopUpOutcome outcome = service.requestTopUp(vaTopUp());
 
@@ -298,14 +334,17 @@ class TopUpServiceTest {
     }
 
     @Test
-    void aSettlementForADifferentAmountCreditsNothing() {
+    void aSettlementForADifferentAmountIsSetAsideForAttentionAndCreditsNothing() {
         recorded(charged(REFERENCE, AMOUNT));
         when(gateway.statusOf(REFERENCE)).thenReturn(gatewaySays(GatewaySettlement.SETTLED, "5000000.00"));
 
-        assertThrows(SettlementMismatchException.class, () -> service.settle(REFERENCE));
+        SettlementOutcome outcome = service.settle(REFERENCE);
 
+        assertFalse(outcome.credited());
+        assertEquals(TransactionStatus.NEEDS_ATTENTION, outcome.transaction().status());
+        assertEquals(AttentionReason.AMOUNT_MISMATCH, outcome.transaction().attentionReason());
         verify(customerWallets, never()).save(any());
-        verify(transactions, never()).save(any());
+        verify(alarm).setAside(outcome.transaction());
     }
 
     @Test
@@ -363,18 +402,32 @@ class TopUpServiceTest {
 
         assertThrows(GatewayUnavailableException.class, () -> service.settle(REFERENCE));
 
-        assertEquals(0, transactionRunner.transactions());
+        verify(transactions).markChecked(eq(REFERENCE), any());
         verify(transactions, never()).save(any());
+        verify(advisoryLock, never()).lockWalletOwner(any());
         verifyNoInteractions(customerWallets);
     }
 
     @Test
-    void aGatewayWithNoSuchTransactionCreditsNothing() {
+    void everyAnswerTheGatewayGivesIsRecordedAsACheckSoTheSweepMovesOn() {
+        stale(charged("TOPUP-abandoned", AMOUNT));
+        when(gateway.statusOf("TOPUP-abandoned")).thenReturn(gatewaySays(GatewaySettlement.PENDING, null));
+
+        service.reconcilePendingTopUps(Duration.ofMinutes(10), 100, GRACE);
+
+        verify(transactions).markChecked(eq("TOPUP-abandoned"), any());
+        verify(transactions, never()).save(any());
+    }
+
+    @Test
+    void aNotificationForATransactionTheGatewayDoesNotKnowLeavesItPendingAndCreditsNothing() {
         recorded(charged(REFERENCE, AMOUNT));
         when(gateway.statusOf(REFERENCE)).thenReturn(gatewaySays(GatewaySettlement.NOT_FOUND, null));
 
-        assertThrows(SettlementMismatchException.class, () -> service.settle(REFERENCE));
+        SettlementOutcome outcome = service.settle(REFERENCE);
 
+        assertEquals(TransactionStatus.PENDING, outcome.transaction().status());
+        verify(transactions, never()).save(any());
         verify(customerWallets, never()).save(any());
     }
 
@@ -393,6 +446,8 @@ class TopUpServiceTest {
                     TransactionStatus.SUCCESS,
                     null,
                     Instant.now(),
+                    null,
+                    null,
                     null
                 )
             )
@@ -411,7 +466,7 @@ class TopUpServiceTest {
         when(customerWallets.findByCustomerPrincipalIdForUpdate(CUSTOMER))
             .thenReturn(Optional.of(CustomerWallet.createInitial(CUSTOMER)));
 
-        assertEquals(2, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100));
+        assertEquals(2, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100, GRACE));
 
         verify(transactions, times(2)).save(
             argThat(
@@ -429,7 +484,7 @@ class TopUpServiceTest {
         when(customerWallets.findByCustomerPrincipalIdForUpdate(CUSTOMER))
             .thenReturn(Optional.of(CustomerWallet.createInitial(CUSTOMER)));
 
-        assertEquals(1, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100));
+        assertEquals(1, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100, GRACE));
 
         verify(transactions, never()).save(
             argThat(
@@ -448,10 +503,16 @@ class TopUpServiceTest {
         when(customerWallets.findByCustomerPrincipalIdForUpdate(CUSTOMER))
             .thenReturn(Optional.of(CustomerWallet.createInitial(CUSTOMER)));
 
-        assertEquals(1, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100));
+        assertEquals(2, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100, GRACE));
 
         verify(gateway).statusOf("TOPUP-paid");
         verify(customerWallets, times(1)).save(any());
+        verify(transactions).save(
+            argThat(
+                (PaymentTransaction t) ->
+                    "TOPUP-mismatch".equals(t.referenceNumber()) && t.status() == TransactionStatus.NEEDS_ATTENTION
+            )
+        );
     }
 
     @Test
@@ -459,7 +520,7 @@ class TopUpServiceTest {
         stale(pendingTopUp("TOPUP-a"));
         when(gateway.statusOf("TOPUP-a")).thenReturn(gatewaySays(GatewaySettlement.PENDING, null));
 
-        assertEquals(0, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100));
+        assertEquals(0, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100, GRACE));
 
         verifyNoInteractions(customerWallets);
     }
@@ -469,7 +530,7 @@ class TopUpServiceTest {
         stale(pendingTopUp("TOPUP-a"));
         when(gateway.statusOf("TOPUP-a")).thenReturn(gatewaySays(GatewaySettlement.EXPIRED, null));
 
-        assertEquals(1, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100));
+        assertEquals(1, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100, GRACE));
 
         verify(transactions).save(argThat((PaymentTransaction t) -> t.status() == TransactionStatus.EXPIRED));
         verify(customerWallets, never()).save(any());
@@ -480,7 +541,7 @@ class TopUpServiceTest {
         when(transactions.findPendingTopUpsOlderThan(any(), anyInt())).thenReturn(List.of());
 
         Instant before = Instant.now();
-        service.reconcilePendingTopUps(Duration.ofMinutes(10), 25);
+        service.reconcilePendingTopUps(Duration.ofMinutes(10), 25, GRACE);
         Instant after = Instant.now();
 
         ArgumentCaptor<Instant> cutoff = ArgumentCaptor.forClass(Instant.class);
@@ -495,18 +556,238 @@ class TopUpServiceTest {
     void aSweepWithNothingStaleTouchesNothing() {
         when(transactions.findPendingTopUpsOlderThan(any(), anyInt())).thenReturn(List.of());
 
-        assertEquals(0, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100));
+        assertEquals(0, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100, GRACE));
 
         verifyNoInteractions(gateway, customerWallets, advisoryLock);
+    }
+
+    @Test
+    void aTopUpAboveTheLimitIsRefusedBeforeAnythingIsWrittenOrCharged() {
+        TopUpLimitExceededException refused = assertThrows(
+            TopUpLimitExceededException.class,
+            () -> service.requestTopUp(vaTopUp(new BigDecimal("2000001")))
+        );
+
+        assertEquals(TopUpLimitExceededException.TOP_UP_AMOUNT, refused.code());
+        assertEquals(0, LIMIT.compareTo(refused.limit()));
+        verifyNoInteractions(gateway);
+        verify(transactions, never()).save(any());
+    }
+
+    @Test
+    void aTopUpOfExactlyTheLimitIntoAnEmptyWalletIsCharged() {
+        when(gateway.charge(any())).thenReturn(accepted());
+
+        service.requestTopUp(vaTopUp(LIMIT));
+
+        verify(gateway).charge(any());
+    }
+
+    @Test
+    void aTopUpThatWouldTakeTheBalanceOverTheLimitIsRefusedBeforeTheGatewayIsCalled() {
+        walletHolds("1950000.00");
+
+        TopUpLimitExceededException refused = assertThrows(
+            TopUpLimitExceededException.class,
+            () -> service.requestTopUp(vaTopUp(new BigDecimal("50001")))
+        );
+
+        assertEquals(TopUpLimitExceededException.WALLET_BALANCE, refused.code());
+        verifyNoInteractions(gateway);
+        verify(transactions, never()).save(any());
+    }
+
+    @Test
+    void aReplayIsAnsweredEvenWhenItsOwnCreditFilledTheWallet() {
+        walletHolds("2000000.00");
+        PaymentTransaction first = charged("TOPUP-first", AMOUNT)
+            .concludedAs(TransactionStatus.SUCCESS, "mid-tx-1", "{}");
+        when(transactions.findByPrincipalIdAndIdempotencyKey(CUSTOMER, KEY)).thenReturn(Optional.of(first));
+
+        TopUpOutcome outcome = service.requestTopUp(vaTopUp());
+
+        assertTrue(outcome.replayed());
+        assertEquals(TransactionStatus.SUCCESS, outcome.transaction().status());
+        verifyNoInteractions(gateway);
+    }
+
+    @Test
+    void aSettlementThatWouldTakeTheBalanceOverTheLimitIsSetAsideAndRaisesTheAlarm() {
+        recorded(charged(REFERENCE, AMOUNT));
+        walletHolds("1980000.00");
+        when(gateway.statusOf(REFERENCE)).thenReturn(gatewaySays(GatewaySettlement.SETTLED, "50000.00"));
+
+        SettlementOutcome outcome = service.settle(REFERENCE);
+
+        assertFalse(outcome.credited());
+        assertEquals(TransactionStatus.NEEDS_ATTENTION, outcome.transaction().status());
+        assertEquals(AttentionReason.BALANCE_LIMIT_EXCEEDED, outcome.transaction().attentionReason());
+        assertEquals("mid-tx-1", outcome.transaction().externalTransactionId());
+        verify(customerWallets, never()).save(any());
+        verify(alarm).setAside(outcome.transaction());
+    }
+
+    @Test
+    void aTopUpSetAsideForAttentionIsNeitherAskedAboutNorCreditedAgain() {
+        recorded(
+            charged(REFERENCE, AMOUNT).setAsideFor(AttentionReason.AMOUNT_MISMATCH, "mid-tx-1", "{}")
+        );
+
+        SettlementOutcome outcome = service.settle(REFERENCE);
+
+        assertEquals(TransactionStatus.NEEDS_ATTENTION, outcome.transaction().status());
+        verifyNoInteractions(gateway, customerWallets, alarm);
+    }
+
+    @Test
+    void aChargeThatNeverGotAnAnswerAndIsStillUnknownAfterTheGraceIsConcludedAsFailed() {
+        PaymentTransaction neverAnswered = createdAgo(
+            PaymentTransaction.pendingTopUp(
+                "TOPUP-lost",
+                CUSTOMER,
+                KEY,
+                PaymentMethod.MIDTRANS_VA,
+                VirtualAccountBank.BCA,
+                AMOUNT
+            ),
+            GRACE.plusMinutes(1)
+        );
+        stale(neverAnswered);
+        when(gateway.statusOf("TOPUP-lost")).thenReturn(gatewaySays(GatewaySettlement.NOT_FOUND, null));
+
+        assertEquals(1, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100, GRACE));
+
+        assertEquals(TransactionStatus.FAILED, rows.get("TOPUP-lost").status());
+        verify(customerWallets, never()).save(any());
+        verifyNoInteractions(alarm);
+    }
+
+    @Test
+    void aChargeTheGatewayAcceptedAndNoLongerKnowsIsSetAsideNotFailed() {
+        stale(createdAgo(charged("TOPUP-forgotten", AMOUNT), GRACE.plusMinutes(1)));
+        when(gateway.statusOf("TOPUP-forgotten")).thenReturn(gatewaySays(GatewaySettlement.NOT_FOUND, null));
+
+        assertEquals(1, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100, GRACE));
+
+        PaymentTransaction setAside = rows.get("TOPUP-forgotten");
+        assertEquals(TransactionStatus.NEEDS_ATTENTION, setAside.status());
+        assertEquals(AttentionReason.GATEWAY_HAS_NO_RECORD, setAside.attentionReason());
+        verify(alarm).setAside(setAside);
+    }
+
+    @Test
+    void aChargeTheGatewayDoesNotKnowYetStaysPendingInsideTheGrace() {
+        stale(createdAgo(charged("TOPUP-young", AMOUNT), Duration.ofMinutes(15)));
+        when(gateway.statusOf("TOPUP-young")).thenReturn(gatewaySays(GatewaySettlement.NOT_FOUND, null));
+
+        assertEquals(0, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100, GRACE));
+
+        verify(transactions, never()).save(any());
+    }
+
+    @Test
+    void aSweepOfAHundredMismatchedTopUpsTakesEveryOneOutOfTheSweep() {
+        PaymentTransaction[] mismatched = new PaymentTransaction[100];
+        for (int i = 0; i < mismatched.length; i++) {
+            mismatched[i] = charged("TOPUP-m" + i, AMOUNT);
+            when(gateway.statusOf("TOPUP-m" + i)).thenReturn(gatewaySays(GatewaySettlement.SETTLED, "1.00"));
+        }
+        stale(mismatched);
+
+        assertEquals(100, service.reconcilePendingTopUps(Duration.ofMinutes(10), 100, GRACE));
+
+        assertTrue(
+            rows.values().stream().allMatch(row -> row.status() == TransactionStatus.NEEDS_ATTENTION),
+            "a mismatched top-up stayed PENDING and would be swept again"
+        );
+        verify(customerWallets, never()).save(any());
+    }
+
+    @Test
+    void aKeyReusedForAnotherBankIsAConflictNotAReplay() {
+        when(transactions.findByPrincipalIdAndIdempotencyKey(CUSTOMER, KEY))
+            .thenReturn(Optional.of(charged("TOPUP-first", AMOUNT)));
+
+        assertThrows(
+            IdempotencyConflictException.class,
+            () -> service.requestTopUp(
+                new TopUpCommand(CUSTOMER, KEY, AMOUNT, PaymentMethod.MIDTRANS_VA, VirtualAccountBank.BNI)
+            )
+        );
+
+        verify(gateway, never()).charge(any());
+    }
+
+    @Test
+    void theBankIsRecordedWithTheTopUp() {
+        when(gateway.charge(any())).thenReturn(accepted());
+
+        service.requestTopUp(vaTopUp());
+
+        verify(transactions).save(
+            argThat(
+                (PaymentTransaction t) ->
+                    t.status() == TransactionStatus.PENDING
+                        && t.externalTransactionId() == null
+                        && t.bank() == VirtualAccountBank.BCA
+            )
+        );
+    }
+
+    @Test
+    void anAcceptedChargeWithoutATransactionIdIsReplayedWithHowToPayRatherThanAs503() {
+        PaymentTransaction acceptedWithoutId = PaymentTransaction.pendingTopUp(
+            "TOPUP-first",
+            CUSTOMER,
+            KEY,
+            PaymentMethod.MIDTRANS_VA,
+            VirtualAccountBank.BCA,
+            AMOUNT
+        )
+            .withGatewayResponse(null, VA_RESPONSE);
+        when(transactions.findByPrincipalIdAndIdempotencyKey(CUSTOMER, KEY))
+            .thenReturn(Optional.of(acceptedWithoutId));
+        when(gateway.instructionsFrom(VA_RESPONSE))
+            .thenReturn(new PaymentInstructions(VirtualAccountBank.BCA, "12345678901", null, null));
+
+        TopUpOutcome outcome = service.requestTopUp(vaTopUp());
+
+        assertTrue(outcome.replayed());
+        assertEquals("12345678901", outcome.instructions().virtualAccountNumber());
+        verify(gateway, never()).charge(any());
+    }
+
+    @Test
+    void anAcceptedChargeDoesNotOverwriteATopUpTheNotificationAlreadySettled() {
+        when(gateway.charge(any())).thenAnswer(call -> {
+            GatewayChargeRequest request = call.getArgument(0);
+            rows.put(
+                request.referenceNumber(),
+                rows.get(request.referenceNumber()).concludedAs(TransactionStatus.SUCCESS, "mid-tx-1", "{}")
+            );
+            return accepted();
+        });
+
+        TopUpOutcome outcome = service.requestTopUp(vaTopUp());
+
+        assertEquals(TransactionStatus.SUCCESS, outcome.transaction().status());
+        assertEquals(PaymentInstructions.none(), outcome.instructions());
+        verify(transactions, times(1)).save(any());
+    }
+
+    @Test
+    void theRecordedAmountCarriesTheLedgerScaleWhateverScaleTheRequestUsed() {
+        when(gateway.charge(any())).thenReturn(accepted());
+
+        TopUpOutcome outcome = service.requestTopUp(vaTopUp(new BigDecimal("50000")));
+
+        assertEquals("50000.00", outcome.transaction().amount().toPlainString());
     }
 
     private void stale(PaymentTransaction... pending) {
         when(transactions.findPendingTopUpsOlderThan(any(), anyInt())).thenReturn(List.of(pending));
         for (PaymentTransaction transaction : pending) {
-            when(transactions.findByReferenceNumber(transaction.referenceNumber()))
-                .thenReturn(Optional.of(transaction));
-            when(transactions.findByReferenceNumberForUpdate(transaction.referenceNumber()))
-                .thenReturn(Optional.of(transaction));
+            recorded(transaction);
         }
     }
 
@@ -515,7 +796,11 @@ class TopUpServiceTest {
     }
 
     private static TopUpCommand vaTopUp() {
-        return new TopUpCommand(CUSTOMER, KEY, AMOUNT, PaymentMethod.MIDTRANS_VA, VirtualAccountBank.BCA);
+        return vaTopUp(AMOUNT);
+    }
+
+    private static TopUpCommand vaTopUp(BigDecimal amount) {
+        return new TopUpCommand(CUSTOMER, KEY, amount, PaymentMethod.MIDTRANS_VA, VirtualAccountBank.BCA);
     }
 
     private static GatewayCharge accepted() {
@@ -529,13 +814,44 @@ class TopUpServiceTest {
     }
 
     private static PaymentTransaction charged(String reference, BigDecimal amount) {
-        return PaymentTransaction.pendingTopUp(reference, CUSTOMER, KEY, PaymentMethod.MIDTRANS_VA, amount)
+        return PaymentTransaction.pendingTopUp(
+            reference,
+            CUSTOMER,
+            KEY,
+            PaymentMethod.MIDTRANS_VA,
+            VirtualAccountBank.BCA,
+            amount
+        )
             .withGatewayResponse("mid-tx-1", VA_RESPONSE);
     }
 
     private void recorded(PaymentTransaction transaction) {
-        when(transactions.findByReferenceNumber(REFERENCE)).thenReturn(Optional.of(transaction));
-        when(transactions.findByReferenceNumberForUpdate(REFERENCE)).thenReturn(Optional.of(transaction));
+        when(transactions.findByReferenceNumber(transaction.referenceNumber())).thenReturn(Optional.of(transaction));
+        rows.put(transaction.referenceNumber(), transaction);
+    }
+
+    private static PaymentTransaction createdAgo(PaymentTransaction transaction, Duration age) {
+        return new PaymentTransaction(
+            transaction.id(),
+            transaction.referenceNumber(),
+            transaction.externalTransactionId(),
+            transaction.principalId(),
+            transaction.type(),
+            transaction.method(),
+            transaction.amount(),
+            transaction.status(),
+            transaction.gatewayResponse(),
+            Instant.now().minus(age),
+            transaction.idempotencyKey(),
+            transaction.bank(),
+            transaction.attentionReason()
+        );
+    }
+
+    private void walletHolds(String balance) {
+        CustomerWallet wallet = CustomerWallet.createInitial(CUSTOMER).topUp(new BigDecimal(balance));
+        when(customerWallets.findByCustomerPrincipalId(CUSTOMER)).thenReturn(Optional.of(wallet));
+        when(customerWallets.findByCustomerPrincipalIdForUpdate(CUSTOMER)).thenReturn(Optional.of(wallet));
     }
 
     private static GatewayStatus gatewaySays(GatewaySettlement settlement, String grossAmount) {

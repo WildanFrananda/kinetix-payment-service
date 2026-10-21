@@ -1,6 +1,8 @@
 package com.kinetix.payment.infrastructure.persistence;
 
+import com.kinetix.payment.domain.entity.AttentionReason;
 import com.kinetix.payment.domain.entity.PaymentTransaction;
+import com.kinetix.payment.domain.gateway.VirtualAccountBank;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -51,6 +53,17 @@ public class PaymentTransactionJpaEntity {
     @Column(name = "idempotency_key", length = 128)
     private String idempotencyKey;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "bank", length = 16)
+    private VirtualAccountBank bank;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "attention_reason", length = 32)
+    private AttentionReason attentionReason;
+
+    @Column(name = "last_checked_at", insertable = false, updatable = false)
+    private Instant lastCheckedAt;
+
     public PaymentTransactionJpaEntity() {}
 
     public PaymentTransactionJpaEntity(
@@ -64,7 +77,9 @@ public class PaymentTransactionJpaEntity {
         PaymentTransaction.TransactionStatus status,
         String gatewayResponse,
         Instant createdAt,
-        String idempotencyKey
+        String idempotencyKey,
+        VirtualAccountBank bank,
+        AttentionReason attentionReason
     ) {
         this.id = id;
         this.referenceNumber = referenceNumber;
@@ -77,6 +92,8 @@ public class PaymentTransactionJpaEntity {
         this.gatewayResponse = gatewayResponse;
         this.createdAt = createdAt;
         this.idempotencyKey = idempotencyKey;
+        this.bank = bank;
+        this.attentionReason = attentionReason;
     }
 
     public Long getId() { return id; }
@@ -90,4 +107,7 @@ public class PaymentTransactionJpaEntity {
     public String getGatewayResponse() { return gatewayResponse; }
     public Instant getCreatedAt() { return createdAt; }
     public String getIdempotencyKey() { return idempotencyKey; }
+    public VirtualAccountBank getBank() { return bank; }
+    public AttentionReason getAttentionReason() { return attentionReason; }
+    public Instant getLastCheckedAt() { return lastCheckedAt; }
 }
