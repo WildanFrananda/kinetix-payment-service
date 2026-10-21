@@ -22,28 +22,33 @@ public class ReconciliationScheduler {
     private final Duration pendingTopUpAge;
     private final int topUpBatchSize;
     private final Duration topUpInterval;
+    private final Duration notFoundGrace;
 
     public ReconciliationScheduler(
         TopUpService topUps,
         ShutdownState shutdownState,
         @Value("${kinetix.reconciliation.pending-top-up-age}") Duration pendingTopUpAge,
         @Value("${kinetix.reconciliation.top-up-batch-size}") int topUpBatchSize,
-        @Value("${kinetix.reconciliation.top-up-interval}") Duration topUpInterval
+        @Value("${kinetix.reconciliation.top-up-interval}") Duration topUpInterval,
+        @Value("${kinetix.reconciliation.not-found-grace}") Duration notFoundGrace
     ) {
         this.topUps = topUps;
         this.shutdownState = shutdownState;
         this.pendingTopUpAge = pendingTopUpAge;
         this.topUpBatchSize = topUpBatchSize;
         this.topUpInterval = topUpInterval;
+        this.notFoundGrace = notFoundGrace;
     }
 
     @EventListener(ApplicationReadyEvent.class)
     public void announce() {
         LOG.info(
-            "reconciliation armed: top-ups older than {} every {} (max {} per sweep)",
+            "reconciliation armed: top-ups older than {} every {} (max {} per sweep); a charge the gateway "
+                + "still does not know after {} is concluded",
             pendingTopUpAge,
             topUpInterval,
-            topUpBatchSize
+            topUpBatchSize,
+            notFoundGrace
         );
     }
 
@@ -57,7 +62,7 @@ public class ReconciliationScheduler {
         }
 
         try {
-            int concluded = topUps.reconcilePendingTopUps(pendingTopUpAge, topUpBatchSize);
+            int concluded = topUps.reconcilePendingTopUps(pendingTopUpAge, topUpBatchSize, notFoundGrace);
             if (concluded > 0) {
                 LOG.info("top-up reconciliation concluded {} top-up(s)", concluded);
             }

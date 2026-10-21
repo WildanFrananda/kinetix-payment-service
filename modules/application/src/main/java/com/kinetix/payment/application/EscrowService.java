@@ -787,6 +787,8 @@ public class EscrowService {
                 PaymentTransaction.TransactionStatus.SUCCESS,
                 null,
                 Instant.now(),
+                null,
+                null,
                 null
             )
         );

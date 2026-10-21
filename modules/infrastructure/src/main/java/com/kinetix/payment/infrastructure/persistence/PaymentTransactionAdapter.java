@@ -43,6 +43,11 @@ public class PaymentTransactionAdapter implements PaymentTransactionRepositoryPo
     }
 
     @Override
+    public void markChecked(String referenceNumber, Instant checkedAt) {
+        jpaRepository.markChecked(referenceNumber, checkedAt);
+    }
+
+    @Override
     public PaymentTransaction save(PaymentTransaction tx) {
         PaymentTransactionJpaEntity entity = new PaymentTransactionJpaEntity(
             tx.id(),
@@ -55,7 +60,9 @@ public class PaymentTransactionAdapter implements PaymentTransactionRepositoryPo
             tx.status(),
             tx.gatewayResponse(),
             tx.createdAt(),
-            tx.idempotencyKey()
+            tx.idempotencyKey(),
+            tx.bank(),
+            tx.attentionReason()
         );
         try {
             return toDomain(jpaRepository.saveAndFlush(entity));
@@ -76,7 +83,9 @@ public class PaymentTransactionAdapter implements PaymentTransactionRepositoryPo
             entity.getStatus(),
             entity.getGatewayResponse(),
             entity.getCreatedAt(),
-            entity.getIdempotencyKey()
+            entity.getIdempotencyKey(),
+            entity.getBank(),
+            entity.getAttentionReason()
         );
     }
 }

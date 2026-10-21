@@ -46,8 +46,8 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
     public MidtransPaymentGatewayAdapter(
         @Value("${midtrans.server-key}") String serverKey,
         @Value("${midtrans.base-url}") String baseUrl,
-        @Value("${midtrans.connect-timeout-ms:5000}") long connectTimeoutMillis,
-        @Value("${midtrans.request-timeout-ms:15000}") long requestTimeoutMillis,
+        @Value("${midtrans.connect-timeout-ms}") long connectTimeoutMillis,
+        @Value("${midtrans.request-timeout-ms}") long requestTimeoutMillis,
         ObjectMapper objectMapper
     ) {
         if (serverKey == null || serverKey.isBlank()) {

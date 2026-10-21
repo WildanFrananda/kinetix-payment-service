@@ -1,22 +1,17 @@
 package com.kinetix.payment.application;
 
 import com.kinetix.payment.domain.entity.CustomerWallet;
-import com.kinetix.payment.domain.entity.DriverWallet;
-import com.kinetix.payment.domain.entity.MerchantWallet;
-import com.kinetix.payment.domain.port.AdvisoryLockPort;
 import com.kinetix.payment.domain.port.CustomerWalletRepositoryPort;
 import com.kinetix.payment.domain.port.DriverWalletRepositoryPort;
 import com.kinetix.payment.domain.port.MerchantWalletRepositoryPort;
-import com.kinetix.payment.domain.port.TransactionRunnerPort;
 import java.math.BigDecimal;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InOrder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -30,8 +25,6 @@ class WalletServiceTest {
     private CustomerWalletRepositoryPort customerWalletRepository;
     private MerchantWalletRepositoryPort merchantWalletRepository;
     private DriverWalletRepositoryPort driverWalletRepository;
-    private AdvisoryLockPort advisoryLock;
-    private CountingTransactionRunner transactionRunner;
     private WalletService walletService;
 
     @BeforeEach
@@ -39,84 +32,45 @@ class WalletServiceTest {
         customerWalletRepository = mock(CustomerWalletRepositoryPort.class);
         merchantWalletRepository = mock(MerchantWalletRepositoryPort.class);
         driverWalletRepository = mock(DriverWalletRepositoryPort.class);
-        advisoryLock = mock(AdvisoryLockPort.class);
-        transactionRunner = new CountingTransactionRunner();
 
-        when(customerWalletRepository.save(any())).thenAnswer(call -> call.getArgument(0));
-        when(merchantWalletRepository.save(any())).thenAnswer(call -> call.getArgument(0));
-        when(driverWalletRepository.save(any())).thenAnswer(call -> call.getArgument(0));
-
-        walletService = new WalletService(
-            customerWalletRepository,
-            merchantWalletRepository,
-            driverWalletRepository,
-            transactionRunner,
-            advisoryLock
-        );
+        walletService = new WalletService(customerWalletRepository, merchantWalletRepository, driverWalletRepository);
     }
 
     @Test
-    void getCustomerWallet_readsAnExistingBalanceWithNoLockAndNoTransaction() {
+    void anExistingCustomerBalanceIsReadWithoutALock() {
         when(customerWalletRepository.findByCustomerPrincipalId(CUSTOMER))
             .thenReturn(Optional.of(CustomerWallet.createInitial(CUSTOMER).topUp(new BigDecimal("200000.00"))));
 
-        CustomerWallet wallet = walletService.getCustomerWallet(CUSTOMER);
+        Optional<CustomerWallet> wallet = walletService.findCustomerWallet(CUSTOMER);
 
-        assertEquals(0, new BigDecimal("200000.00").compareTo(wallet.balance()));
-        assertEquals(0, transactionRunner.transactions());
-        verify(advisoryLock, never()).lockWalletOwner(any());
+        assertEquals(0, new BigDecimal("200000.00").compareTo(wallet.orElseThrow().balance()));
         verify(customerWalletRepository, never()).findByCustomerPrincipalIdForUpdate(any());
     }
 
     @Test
-    void getCustomerWallet_createsAMissingWalletUnderTheOwnerLockAndRereadsFirst() {
+    void readingABalanceNobodyHasOpenedCreatesNoCustomerWallet() {
         when(customerWalletRepository.findByCustomerPrincipalId(CUSTOMER)).thenReturn(Optional.empty());
-        when(customerWalletRepository.findByCustomerPrincipalIdForUpdate(CUSTOMER))
-            .thenReturn(Optional.empty());
 
-        walletService.getCustomerWallet(CUSTOMER);
+        assertTrue(walletService.findCustomerWallet(CUSTOMER).isEmpty());
 
-        assertEquals(1, transactionRunner.transactions());
-        InOrder order = inOrder(advisoryLock, customerWalletRepository);
-        order.verify(advisoryLock).lockWalletOwner(CUSTOMER);
-        order.verify(customerWalletRepository).findByCustomerPrincipalIdForUpdate(CUSTOMER);
-        order.verify(customerWalletRepository).save(any());
-    }
-
-    @Test
-    void getCustomerWallet_adoptsARowThatAppearedWhileItWasWaitingForTheLock() {
-        when(customerWalletRepository.findByCustomerPrincipalId(CUSTOMER)).thenReturn(Optional.empty());
-        when(customerWalletRepository.findByCustomerPrincipalIdForUpdate(CUSTOMER))
-            .thenReturn(Optional.of(CustomerWallet.createInitial(CUSTOMER).topUp(new BigDecimal("75000.00"))));
-
-        CustomerWallet wallet = walletService.getCustomerWallet(CUSTOMER);
-
-        assertEquals(0, new BigDecimal("75000.00").compareTo(wallet.balance()));
         verify(customerWalletRepository, never()).save(any());
     }
 
     @Test
-    void getMerchantWallet_createsAMissingWalletUnderTheOwnerLock() {
+    void readingABalanceNobodyHasOpenedCreatesNoMerchantWallet() {
         when(merchantWalletRepository.findByMerchantPrincipalId(MERCHANT)).thenReturn(Optional.empty());
-        when(merchantWalletRepository.findByMerchantPrincipalIdForUpdate(MERCHANT))
-            .thenReturn(Optional.empty());
 
-        MerchantWallet wallet = walletService.getMerchantWallet(MERCHANT);
+        assertTrue(walletService.findMerchantWallet(MERCHANT).isEmpty());
 
-        assertEquals(MERCHANT, wallet.merchantPrincipalId());
-        assertEquals(1, transactionRunner.transactions());
-        verify(advisoryLock).lockWalletOwner(MERCHANT);
+        verify(merchantWalletRepository, never()).save(any());
     }
 
     @Test
-    void getDriverWallet_createsAMissingWalletUnderTheOwnerLock() {
+    void readingABalanceNobodyHasOpenedCreatesNoDriverWallet() {
         when(driverWalletRepository.findByDriverPrincipalId(DRIVER)).thenReturn(Optional.empty());
-        when(driverWalletRepository.findByDriverPrincipalIdForUpdate(DRIVER)).thenReturn(Optional.empty());
 
-        DriverWallet wallet = walletService.getDriverWallet(DRIVER);
+        assertTrue(walletService.findDriverWallet(DRIVER).isEmpty());
 
-        assertEquals(DRIVER, wallet.driverPrincipalId());
-        assertEquals(1, transactionRunner.transactions());
-        verify(advisoryLock).lockWalletOwner(DRIVER);
+        verify(driverWalletRepository, never()).save(any());
     }
 }

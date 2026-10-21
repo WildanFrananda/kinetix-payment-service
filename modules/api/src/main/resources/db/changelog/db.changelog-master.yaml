@@ -663,3 +663,45 @@ databaseChangeLog:
             name: total
             type: numeric(19, 2)
         tableName: liability_snapshot_records
+- changeSet:
+    id: 1792557827340-8
+    author: super (generated)
+    comment: >-
+      Why a top-up was set aside as NEEDS_ATTENTION instead of being credited: the gateway settled another
+      amount, crediting it would take the wallet over its limit, or the gateway no longer knows a charge it
+      accepted. Null on every existing row, which is true: nothing was set aside before this column.
+    changes:
+    - addColumn:
+        columns:
+        - column:
+            name: attention_reason
+            type: VARCHAR(32)
+        tableName: payment_transactions
+- changeSet:
+    id: 1792557827340-9
+    author: super (generated)
+    comment: >-
+      The virtual-account bank a top-up asked for, so a retry under the same Idempotency-Key with another
+      bank is a conflict rather than a replay of the first. Null for QRIS and for rows written before this
+      column.
+    changes:
+    - addColumn:
+        columns:
+        - column:
+            name: bank
+            type: VARCHAR(16)
+        tableName: payment_transactions
+- changeSet:
+    id: 1792558699050-8
+    author: super (generated)
+    comment: >-
+      When the reconciliation sweep last asked the gateway about a top-up. The sweep asks rows never asked
+      first, then the least recently asked, so top-ups the gateway still calls pending cannot hold every place
+      in the batch. Null on every existing row, which is true: none has been asked under this rule yet.
+    changes:
+    - addColumn:
+        columns:
+        - column:
+            name: last_checked_at
+            type: TIMESTAMP(6) WITH TIME ZONE
+        tableName: payment_transactions

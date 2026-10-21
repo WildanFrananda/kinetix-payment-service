@@ -3,9 +3,11 @@ package com.kinetix.payment.api.security;
 import com.nimbusds.jose.KeySourceException;
 import com.nimbusds.jose.jwk.JWK;
 import com.nimbusds.jose.jwk.JWKSelector;
+import com.nimbusds.jose.jwk.source.JWKSetUnavailableException;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.jwk.source.JWKSourceBuilder;
 import com.nimbusds.jose.jwk.source.RateLimitReachedException;
+import com.nimbusds.jose.jwk.source.URLBasedJWKSetSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import com.nimbusds.jose.util.DefaultResourceRetriever;
 import java.net.MalformedURLException;
@@ -18,23 +20,32 @@ public final class RateLimitedKeys implements JWKSource<SecurityContext> {
 
     private final JWKSource<SecurityContext> keys;
 
-    private RateLimitedKeys(JWKSource<SecurityContext> keys) {
+    private final ObservedKeySetSource fetched;
+
+    private RateLimitedKeys(JWKSource<SecurityContext> keys, ObservedKeySetSource fetched) {
         this.keys = keys;
+        this.fetched = fetched;
     }
 
     public static RateLimitedKeys fetchedFrom(String jwksUri) {
+        ObservedKeySetSource fetched;
         try {
-            return new RateLimitedKeys(
-                JWKSourceBuilder.<SecurityContext>create(
-                        URI.create(jwksUri).toURL(),
-                        new DefaultResourceRetriever(2_000, 5_000, 51_200)
-                    )
-                    .rateLimited(UNKNOWN_KEY_REFRESH.toMillis())
-                    .build()
+            fetched = new ObservedKeySetSource(
+                new URLBasedJWKSetSource<>(
+                    URI.create(jwksUri).toURL(),
+                    new DefaultResourceRetriever(2_000, 5_000, 51_200)
+                )
             );
         } catch (MalformedURLException invalid) {
             throw new IllegalStateException("the JWKS URI is not a URL: " + jwksUri, invalid);
         }
+
+        return new RateLimitedKeys(
+            JWKSourceBuilder.create(fetched)
+                .rateLimited(UNKNOWN_KEY_REFRESH.toMillis())
+                .build(),
+            fetched
+        );
     }
 
     @Override
@@ -42,6 +53,12 @@ public final class RateLimitedKeys implements JWKSource<SecurityContext> {
         try {
             return keys.get(selector, context);
         } catch (RateLimitReachedException limited) {
+            if (fetched.lastFetchFailed()) {
+                throw new JWKSetUnavailableException(
+                    "identity's key set could not be fetched, and asking again is rate limited"
+                );
+            }
+
             return List.of();
         }
     }

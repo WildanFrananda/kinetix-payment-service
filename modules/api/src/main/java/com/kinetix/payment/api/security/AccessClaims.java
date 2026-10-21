@@ -16,14 +16,8 @@ public record AccessClaims(String principalId, String email, String role) {
         );
     }
 
-    public boolean mayActOn(String walletRole, String ownerPrincipalId) {
-        if (ADMIN.equals(role)) {
-            return true;
-        }
-
-        return role.equals(walletRole)
-            && principalId != null
-            && principalId.equals(ownerPrincipalId);
+    public boolean holds(String walletRole) {
+        return principalId != null && role != null && role.equals(walletRole);
     }
 
     private static String text(Jwt jwt, String name) {

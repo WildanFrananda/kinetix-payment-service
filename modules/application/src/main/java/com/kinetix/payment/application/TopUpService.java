@@ -1,5 +1,6 @@
 package com.kinetix.payment.application;
 
+import com.kinetix.payment.domain.entity.AttentionReason;
 import com.kinetix.payment.domain.entity.CustomerWallet;
 import com.kinetix.payment.domain.entity.PaymentTransaction;
 import com.kinetix.payment.domain.entity.PaymentTransaction.PaymentMethod;
@@ -9,7 +10,7 @@ import com.kinetix.payment.domain.exception.DuplicateIdempotencyKeyException;
 import com.kinetix.payment.domain.exception.GatewayRefusedException;
 import com.kinetix.payment.domain.exception.GatewayUnavailableException;
 import com.kinetix.payment.domain.exception.IdempotencyConflictException;
-import com.kinetix.payment.domain.exception.SettlementMismatchException;
+import com.kinetix.payment.domain.exception.TopUpLimitExceededException;
 import com.kinetix.payment.domain.exception.TopUpNotFoundException;
 import com.kinetix.payment.domain.gateway.GatewayCharge;
 import com.kinetix.payment.domain.gateway.GatewayChargeRequest;
@@ -20,11 +21,15 @@ import com.kinetix.payment.domain.port.AdvisoryLockPort;
 import com.kinetix.payment.domain.port.CustomerWalletRepositoryPort;
 import com.kinetix.payment.domain.port.PaymentGatewayPort;
 import com.kinetix.payment.domain.port.PaymentTransactionRepositoryPort;
+import com.kinetix.payment.domain.port.TopUpAlarmPort;
 import com.kinetix.payment.domain.port.TransactionRunnerPort;
 import java.math.BigDecimal;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -36,8 +41,6 @@ public class TopUpService {
 
     static final BigDecimal MINIMUM_AMOUNT = new BigDecimal("1000");
 
-    private static final BigDecimal MAXIMUM_STORABLE_AMOUNT = new BigDecimal("9999999999");
-
     private static final Pattern IDEMPOTENCY_KEY = Pattern.compile("[A-Za-z0-9._:-]{1,128}");
 
     private static final String REFERENCE_PREFIX = "TOPUP-";
@@ -47,19 +50,25 @@ public class TopUpService {
     private final PaymentGatewayPort gateway;
     private final TransactionRunnerPort transactionRunner;
     private final AdvisoryLockPort advisoryLock;
+    private final TopUpLimits limits;
+    private final TopUpAlarmPort alarm;
 
     public TopUpService(
         PaymentTransactionRepositoryPort transactions,
         CustomerWalletRepositoryPort customerWallets,
         PaymentGatewayPort gateway,
         TransactionRunnerPort transactionRunner,
-        AdvisoryLockPort advisoryLock
+        AdvisoryLockPort advisoryLock,
+        TopUpLimits limits,
+        TopUpAlarmPort alarm
     ) {
         this.transactions = transactions;
         this.customerWallets = customerWallets;
         this.gateway = gateway;
         this.transactionRunner = transactionRunner;
         this.advisoryLock = advisoryLock;
+        this.limits = limits;
+        this.alarm = alarm;
     }
 
     public TopUpOutcome requestTopUp(TopUpCommand command) {
@@ -72,6 +81,8 @@ public class TopUpService {
         if (seen.isPresent()) {
             return replay(seen.get(), command);
         }
+
+        requireRoomInTheWallet(command);
 
         PaymentTransaction pending;
         try {
@@ -109,22 +120,21 @@ public class TopUpService {
         return new TopUpOutcome(found, instructionsFor(found), true);
     }
 
-    public int reconcilePendingTopUps(Duration olderThan, int batchSize) {
-        List<PaymentTransaction> stale = transactions.findPendingTopUpsOlderThan(
-            Instant.now().minus(olderThan),
-            batchSize
-        );
+    public int reconcilePendingTopUps(Duration olderThan, int batchSize, Duration notFoundGrace) {
+        Instant now = Instant.now();
+        List<PaymentTransaction> stale = transactions.findPendingTopUpsOlderThan(now.minus(olderThan), batchSize);
         if (stale.isEmpty()) {
             return 0;
         }
 
         LOG.info("reconciling {} top-up(s) that have been pending longer than {}", stale.size(), olderThan);
 
+        Optional<Instant> giveUpOnChargesCreatedBefore = Optional.of(now.minus(notFoundGrace));
         int concluded = 0;
         for (PaymentTransaction pending : stale) {
             String reference = pending.referenceNumber();
             try {
-                SettlementOutcome outcome = settle(reference);
+                SettlementOutcome outcome = settle(reference, giveUpOnChargesCreatedBefore);
                 if (outcome.transaction().status() != TransactionStatus.PENDING) {
                     concluded++;
                     LOG.info("reconciled {}: {}", reference, outcome.transaction().status());
@@ -148,6 +158,10 @@ public class TopUpService {
     }
 
     public SettlementOutcome settle(String referenceNumber) {
+        return settle(referenceNumber, Optional.empty());
+    }
+
+    private SettlementOutcome settle(String referenceNumber, Optional<Instant> giveUpOnChargesCreatedBefore) {
         PaymentTransaction known = transactions.findByReferenceNumber(referenceNumber)
             .filter(transaction -> transaction.type() == TransactionType.TOPUP)
             .orElseThrow(() -> new TopUpNotFoundException("no top-up is recorded under " + referenceNumber));
@@ -156,7 +170,13 @@ public class TopUpService {
         }
 
         GatewayStatus truth = gateway.statusOf(referenceNumber);
+        Instant askedAt = Instant.now();
         if (truth.settlement() == GatewaySettlement.UNKNOWN) {
+            transactionRunner.inNewTransaction(() -> {
+                transactions.markChecked(referenceNumber, askedAt);
+                return null;
+            });
+
             LOG.warn(
                 "top-up {} could not be confirmed with the payment gateway and stays pending: {}",
                 referenceNumber,
@@ -171,12 +191,12 @@ public class TopUpService {
 
         return transactionRunner.inNewTransaction(() -> {
             advisoryLock.lockWalletOwner(known.principalId());
-            PaymentTransaction current = transactions.findByReferenceNumberForUpdate(referenceNumber)
-                .orElseThrow(() -> new TopUpNotFoundException("no top-up is recorded under " + referenceNumber));
+            PaymentTransaction current = lockedTopUp(referenceNumber);
             if (current.status() != TransactionStatus.PENDING) {
                 return new SettlementOutcome(current, false);
             }
 
+            transactions.markChecked(referenceNumber, askedAt);
             return switch (truth.settlement()) {
                 case PENDING -> new SettlementOutcome(current, false);
                 case SETTLED -> credit(current, truth);
@@ -200,39 +220,71 @@ public class TopUpService {
                     ),
                     false
                 );
-                case NOT_FOUND -> {
-                    LOG.error(
-                        "top-up {} was recorded as charged, but the payment gateway has no such "
-                            + "transaction; nothing was credited and it needs a person to look",
-                        referenceNumber
-                    );
-                    throw new SettlementMismatchException(
-                        "the payment gateway has no transaction under " + referenceNumber
-                    );
-                }
+                case NOT_FOUND -> unknownToTheGateway(current, truth, giveUpOnChargesCreatedBefore);
                 case UNKNOWN -> throw new IllegalStateException("an unknown settlement was handled above");
             };
         });
     }
 
+    private SettlementOutcome unknownToTheGateway(
+        PaymentTransaction pending,
+        GatewayStatus truth,
+        Optional<Instant> giveUpOnChargesCreatedBefore
+    ) {
+        boolean pastGrace = giveUpOnChargesCreatedBefore
+            .map(deadline -> pending.createdAt().isBefore(deadline))
+            .orElse(false);
+        if (!pastGrace) {
+            LOG.warn(
+                "the payment gateway has no transaction under {} yet; it stays pending and is asked again",
+                pending.referenceNumber()
+            );
+            return new SettlementOutcome(pending, false);
+        }
+
+        if (pending.hasGatewayAnswer()) {
+            return setAside(
+                pending,
+                AttentionReason.GATEWAY_HAS_NO_RECORD,
+                truth,
+                "the payment gateway accepted this charge and now has no transaction under it"
+            );
+        }
+
+        LOG.warn(
+            "top-up {} got no answer when it was charged and the payment gateway still has no transaction "
+                + "under it; it is concluded as failed and nothing was credited",
+            pending.referenceNumber()
+        );
+        return new SettlementOutcome(
+            transactions.save(pending.concludedAs(TransactionStatus.FAILED, null, truth.gatewayResponse())),
+            false
+        );
+    }
+
     private SettlementOutcome credit(PaymentTransaction pending, GatewayStatus truth) {
         if (truth.grossAmount() == null || truth.grossAmount().compareTo(pending.amount()) != 0) {
-            LOG.error(
-                "top-up {} was charged at {} but the payment gateway settled {}; nothing was "
-                    + "credited and it needs a person to look",
-                pending.referenceNumber(),
-                pending.amount(),
-                truth.grossAmount()
-            );
-            throw new SettlementMismatchException(
-                "the payment gateway settled " + truth.grossAmount()
-                    + " for " + pending.referenceNumber() + ", which was charged at " + pending.amount()
-                    + "; nothing was credited"
+            return setAside(
+                pending,
+                AttentionReason.AMOUNT_MISMATCH,
+                truth,
+                "it was charged at " + pending.amount() + " but the payment gateway settled " + truth.grossAmount()
             );
         }
 
         CustomerWallet wallet = customerWallets.findByCustomerPrincipalIdForUpdate(pending.principalId())
             .orElseGet(() -> CustomerWallet.createInitial(pending.principalId()));
+        BigDecimal balanceAfter = wallet.balance().add(pending.amount());
+        if (balanceAfter.compareTo(limits.maximumCustomerBalance()) > 0) {
+            return setAside(
+                pending,
+                AttentionReason.BALANCE_LIMIT_EXCEEDED,
+                truth,
+                "crediting it would bring the wallet to " + balanceAfter + ", above the "
+                    + limits.maximumCustomerBalance() + " a customer wallet may hold"
+            );
+        }
+
         customerWallets.save(wallet.topUp(pending.amount()));
 
         PaymentTransaction settled = transactions.save(
@@ -246,12 +298,33 @@ public class TopUpService {
         return new SettlementOutcome(settled, true);
     }
 
+    private SettlementOutcome setAside(
+        PaymentTransaction pending,
+        AttentionReason reason,
+        GatewayStatus truth,
+        String detail
+    ) {
+        PaymentTransaction setAside = transactions.save(
+            pending.setAsideFor(reason, truth.externalTransactionId(), truth.gatewayResponse())
+        );
+        alarm.setAside(setAside);
+        LOG.error(
+            "top-up {} was set aside as {} ({}): {}; nothing was credited and it needs a person to resolve it",
+            setAside.referenceNumber(),
+            TransactionStatus.NEEDS_ATTENTION,
+            reason,
+            detail
+        );
+        return new SettlementOutcome(setAside, false);
+    }
+
     private PaymentTransaction recordPending(TopUpCommand command) {
         PaymentTransaction pending = PaymentTransaction.pendingTopUp(
             REFERENCE_PREFIX + UUID.randomUUID(),
             command.customerPrincipalId(),
             command.idempotencyKey(),
             command.method(),
+            command.bank(),
             command.amount()
         );
         return transactionRunner.inNewTransaction(() -> transactions.save(pending));
@@ -260,19 +333,34 @@ public class TopUpService {
     private TopUpOutcome conclude(PaymentTransaction pending, GatewayCharge charge) {
         switch (charge.outcome()) {
             case ACCEPTED -> {
-                PaymentTransaction accepted = transactionRunner.inNewTransaction(
-                    () -> transactions.save(
-                        pending.withGatewayResponse(charge.externalTransactionId(), charge.gatewayResponse())
-                    )
-                );
-                return new TopUpOutcome(accepted, charge.instructions(), false);
+                PaymentTransaction recorded = transactionRunner.inNewTransaction(() -> {
+                    PaymentTransaction current = lockedTopUp(pending.referenceNumber());
+                    if (current.status() != TransactionStatus.PENDING) {
+                        return current;
+                    }
+
+                    return transactions.save(
+                        current.withGatewayResponse(charge.externalTransactionId(), charge.gatewayResponse())
+                    );
+                });
+
+                PaymentInstructions instructions = recorded.status() == TransactionStatus.PENDING
+                    ? charge.instructions()
+                    : PaymentInstructions.none();
+                return new TopUpOutcome(recorded, instructions, false);
             }
             case REFUSED -> {
-                transactionRunner.inNewTransaction(
-                    () -> transactions.save(
-                        pending.concludedAs(TransactionStatus.FAILED, null, charge.gatewayResponse())
-                    )
-                );
+                transactionRunner.inNewTransaction(() -> {
+                    PaymentTransaction current = lockedTopUp(pending.referenceNumber());
+                    if (current.status() != TransactionStatus.PENDING) {
+                        return current;
+                    }
+
+                    return transactions.save(
+                        current.concludedAs(TransactionStatus.FAILED, null, charge.gatewayResponse())
+                    );
+                });
+
                 LOG.warn(
                     "top-up {} was refused by the payment gateway: {}",
                     pending.referenceNumber(),
@@ -299,9 +387,15 @@ public class TopUpService {
         }
     }
 
+    private PaymentTransaction lockedTopUp(String referenceNumber) {
+        return transactions.findByReferenceNumberForUpdate(referenceNumber)
+            .orElseThrow(() -> new TopUpNotFoundException("no top-up is recorded under " + referenceNumber));
+    }
+
     private TopUpOutcome replay(PaymentTransaction existing, TopUpCommand command) {
         boolean sameRequest = existing.type() == TransactionType.TOPUP
             && existing.method() == command.method()
+            && existing.bank() == command.bank()
             && existing.amount().compareTo(command.amount()) == 0;
         if (!sameRequest) {
             throw new IdempotencyConflictException(
@@ -309,7 +403,7 @@ public class TopUpService {
             );
         }
 
-        if (existing.externalTransactionId() == null && existing.status() == TransactionStatus.PENDING) {
+        if (existing.status() == TransactionStatus.PENDING && !existing.hasGatewayAnswer()) {
             throw new GatewayUnavailableException(
                 existing.referenceNumber(),
                 "an earlier attempt with this key got no definite answer from the payment gateway; ask for "
@@ -328,14 +422,29 @@ public class TopUpService {
     }
 
     private PaymentInstructions instructionsFor(PaymentTransaction transaction) {
-        if (transaction.status() != TransactionStatus.PENDING || transaction.gatewayResponse() == null) {
+        if (transaction.status() != TransactionStatus.PENDING || !transaction.hasGatewayAnswer()) {
             return PaymentInstructions.none();
         }
 
         return gateway.instructionsFrom(transaction.gatewayResponse());
     }
 
-    private static long validated(TopUpCommand command) {
+    private void requireRoomInTheWallet(TopUpCommand command) {
+        BigDecimal balance = customerWallets.findByCustomerPrincipalId(command.customerPrincipalId())
+            .map(CustomerWallet::balance)
+            .orElse(BigDecimal.ZERO);
+        BigDecimal balanceAfter = balance.add(command.amount());
+        if (balanceAfter.compareTo(limits.maximumCustomerBalance()) > 0) {
+            throw new TopUpLimitExceededException(
+                TopUpLimitExceededException.WALLET_BALANCE,
+                limits.maximumCustomerBalance(),
+                "this top-up would bring the wallet to IDR " + rupiah(balanceAfter) + ", above the IDR "
+                    + rupiah(limits.maximumCustomerBalance()) + " a customer wallet may hold"
+            );
+        }
+    }
+
+    private long validated(TopUpCommand command) {
         if (command.customerPrincipalId() == null || command.customerPrincipalId().isBlank()) {
             throw new IllegalArgumentException("a customer principal id is required");
         }
@@ -350,8 +459,12 @@ public class TopUpService {
             throw new IllegalArgumentException("the minimum top-up is IDR 1,000");
         }
 
-        if (command.amount().compareTo(MAXIMUM_STORABLE_AMOUNT) > 0) {
-            throw new IllegalArgumentException("a single top-up cannot exceed IDR 9,999,999,999");
+        if (command.amount().compareTo(limits.maximumTopUp()) > 0) {
+            throw new TopUpLimitExceededException(
+                TopUpLimitExceededException.TOP_UP_AMOUNT,
+                limits.maximumTopUp(),
+                "a single top-up is at most IDR " + rupiah(limits.maximumTopUp())
+            );
         }
 
         BigDecimal whole = command.amount().stripTrailingZeros();
@@ -375,5 +488,9 @@ public class TopUpService {
         }
 
         return whole.longValueExact();
+    }
+
+    private static String rupiah(BigDecimal amount) {
+        return new DecimalFormat("#,##0.##", DecimalFormatSymbols.getInstance(Locale.ROOT)).format(amount);
     }
 }

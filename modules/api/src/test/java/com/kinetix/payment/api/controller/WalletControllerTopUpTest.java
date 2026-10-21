@@ -141,6 +141,7 @@ class WalletControllerTopUpTest {
             CUSTOMER,
             "k-1",
             PaymentMethod.MIDTRANS_VA,
+            VirtualAccountBank.BCA,
             new BigDecimal("50000")
         )
             .withGatewayResponse("mid-1", "{}");

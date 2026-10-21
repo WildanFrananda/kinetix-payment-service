@@ -47,6 +47,8 @@ jobs:
       JWT_ISSUER: https://identity.ci.invalid
       JWT_AUDIENCE: kinetix
       GRPC_ALLOWED_CALLERS: order
+      TOP_UP_MAXIMUM_AMOUNT: "2000000"
+      CUSTOMER_WALLET_MAXIMUM_BALANCE: "2000000"
 
     steps:
       - uses: actions/checkout@v6
