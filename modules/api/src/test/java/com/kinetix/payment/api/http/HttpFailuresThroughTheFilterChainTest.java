@@ -12,11 +12,16 @@ import com.kinetix.payment.application.WalletService;
 import com.kinetix.payment.domain.exception.TopUpLimitExceededException;
 import com.kinetix.payment.domain.port.PaymentGatewayPort;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.math.BigDecimal;
+import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Locale;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Value;
@@ -46,6 +51,10 @@ class HttpFailuresThroughTheFilterChainTest {
     private static final String BALANCE = "/api/v1/payment/wallet/customer/balance";
 
     private static final String NOTIFICATIONS = "/api/v1/payment/gateway/midtrans/notifications";
+
+    private static final String KONG_UPSTREAM_HOST = "kinetix-payment-service:8003";
+
+    private static final String INTERNAL_NAME = "kinetix-payment-service";
 
     private static final String TOP_UP_BODY =
         "{\"amount\": 50000, \"paymentMethod\": \"MIDTRANS_VA\", \"bank\": \"BCA\"}";
@@ -185,6 +194,24 @@ class HttpFailuresThroughTheFilterChainTest {
     }
 
     @Test
+    void aRequestWithoutATokenForwardedByKongIsChallengedWithoutNamingPaymentsInternalHost() throws Exception {
+        String answer = sendAsKongForwards(BALANCE, null);
+
+        assertEquals("HTTP/1.1 401", statusOf(answer), answer);
+        assertEquals("Bearer", headerOf(answer, "WWW-Authenticate"), answer);
+        assertFalse(answer.contains(INTERNAL_NAME), "the 401 names payment's internal host: " + answer);
+    }
+
+    @Test
+    void aRefusedTokenForwardedByKongIsChallengedWithoutNamingPaymentsInternalHost() throws Exception {
+        String answer = sendAsKongForwards(BALANCE, "Bearer " + IDENTITY.refreshTokenFor(CUSTOMER, "customer"));
+
+        assertEquals("HTTP/1.1 401", statusOf(answer), answer);
+        assertEquals("Bearer error=\"invalid_token\"", headerOf(answer, "WWW-Authenticate"), answer);
+        assertFalse(answer.contains(INTERNAL_NAME), "the 401 names payment's internal host: " + answer);
+    }
+
+    @Test
     void aNotificationThatIsNotJsonIs400NotAnEmpty401() throws Exception {
         HttpResponse<String> response = send(notification("{\"order_id\":"));
 
@@ -314,5 +341,48 @@ class HttpFailuresThroughTheFilterChainTest {
 
     private HttpResponse<String> send(HttpRequest.Builder request) throws IOException, InterruptedException {
         return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private String sendAsKongForwards(String path, String authorization) throws IOException {
+        StringBuilder head = new StringBuilder()
+            .append("GET ").append(path).append(" HTTP/1.1\r\n")
+            .append("Host: ").append(KONG_UPSTREAM_HOST).append("\r\n")
+            .append("X-Forwarded-For: 203.0.113.7\r\n")
+            .append("X-Forwarded-Proto: https\r\n")
+            .append("X-Forwarded-Host: api.kinetix.example\r\n")
+            .append("X-Forwarded-Port: 443\r\n")
+            .append("X-Forwarded-Path: ").append(path).append("\r\n")
+            .append("X-Real-IP: 203.0.113.7\r\n");
+        if (authorization != null) {
+            head.append("Authorization: ").append(authorization).append("\r\n");
+        }
+
+        head.append("Connection: close\r\n\r\n");
+
+        try (Socket socket = new Socket("127.0.0.1", port)) {
+            socket.setSoTimeout(10_000);
+            OutputStream out = socket.getOutputStream();
+            out.write(head.toString().getBytes(StandardCharsets.US_ASCII));
+            out.flush();
+
+            return new String(socket.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private static String statusOf(String answer) {
+        String statusLine = answer.lines().findFirst().orElse("");
+        return statusLine.length() < 12 ? statusLine : statusLine.substring(0, 12);
+    }
+
+    private static String headerOf(String answer, String name) {
+        String prefix = name.toLowerCase(Locale.ROOT) + ":";
+        String[] head = answer.split("\r\n\r\n", 2)[0].split("\r\n");
+
+        return Arrays.stream(head)
+            .skip(1)
+            .filter(line -> line.toLowerCase(Locale.ROOT).startsWith(prefix))
+            .map(line -> line.substring(prefix.length()).trim())
+            .findFirst()
+            .orElse(null);
     }
 }

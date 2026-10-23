@@ -70,13 +70,17 @@ final class IdentityKeys {
     }
 
     String tokenFor(String principalId, String role) {
-        return signedWith(signing, principalId, role);
+        return signedWith(signing, principalId, role, "access");
+    }
+
+    String refreshTokenFor(String principalId, String role) {
+        return signedWith(signing, principalId, role, "refresh");
     }
 
     String tokenWithAnUnknownKey(String principalId, String role) {
         try {
             RSAKey stranger = new RSAKeyGenerator(2048).keyID("unknown-" + UUID.randomUUID()).generate();
-            return signedWith(stranger, principalId, role);
+            return signedWith(stranger, principalId, role, "access");
         } catch (JOSEException failure) {
             throw new IllegalStateException("a stranger's key could not be generated", failure);
         }
@@ -88,13 +92,13 @@ final class IdentityKeys {
         }
     }
 
-    private static String signedWith(RSAKey key, String principalId, String role) {
+    private static String signedWith(RSAKey key, String principalId, String role, String tokenUse) {
         JWTClaimsSet claims = new JWTClaimsSet.Builder()
             .subject(principalId)
             .issuer(ISSUER)
             .audience(AUDIENCE)
             .expirationTime(Date.from(Instant.now().plusSeconds(900)))
-            .claim("token_use", "access")
+            .claim("token_use", tokenUse)
             .claim("email", "probe@kinetix.test")
             .claim("role", role)
             .build();

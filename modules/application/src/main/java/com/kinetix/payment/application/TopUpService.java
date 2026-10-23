@@ -82,11 +82,17 @@ public class TopUpService {
             return replay(seen.get(), command);
         }
 
-        requireRoomInTheWallet(command);
-
-        PaymentTransaction pending;
+        PaymentTransaction pending = PaymentTransaction.pendingTopUp(
+            REFERENCE_PREFIX + UUID.randomUUID(),
+            command.customerPrincipalId(),
+            command.idempotencyKey(),
+            command.method(),
+            command.bank(),
+            command.amount()
+        );
+        PaymentTransaction recorded;
         try {
-            pending = recordPending(command);
+            recorded = recordIfTheWalletHasRoom(pending);
         } catch (DuplicateIdempotencyKeyException raced) {
             return replay(
                 transactions.findByPrincipalIdAndIdempotencyKey(
@@ -97,15 +103,19 @@ public class TopUpService {
             );
         }
 
+        if (!recorded.referenceNumber().equals(pending.referenceNumber())) {
+            return replay(recorded, command);
+        }
+
         GatewayCharge charge = gateway.charge(
             new GatewayChargeRequest(
-                pending.referenceNumber(),
+                recorded.referenceNumber(),
                 grossAmount,
                 command.method(),
                 command.bank()
             )
         );
-        return conclude(pending, charge);
+        return conclude(recorded, charge);
     }
 
     public TopUpOutcome findTopUp(String customerPrincipalId, String referenceNumber) {
@@ -318,16 +328,20 @@ public class TopUpService {
         return new SettlementOutcome(setAside, false);
     }
 
-    private PaymentTransaction recordPending(TopUpCommand command) {
-        PaymentTransaction pending = PaymentTransaction.pendingTopUp(
-            REFERENCE_PREFIX + UUID.randomUUID(),
-            command.customerPrincipalId(),
-            command.idempotencyKey(),
-            command.method(),
-            command.bank(),
-            command.amount()
-        );
-        return transactionRunner.inNewTransaction(() -> transactions.save(pending));
+    private PaymentTransaction recordIfTheWalletHasRoom(PaymentTransaction pending) {
+        return transactionRunner.inNewTransaction(() -> {
+            advisoryLock.lockWalletOwner(pending.principalId());
+            Optional<PaymentTransaction> earlier = transactions.findByPrincipalIdAndIdempotencyKey(
+                pending.principalId(),
+                pending.idempotencyKey()
+            );
+            if (earlier.isPresent()) {
+                return earlier.get();
+            }
+
+            requireRoomInTheWallet(pending);
+            return transactions.save(pending);
+        });
     }
 
     private TopUpOutcome conclude(PaymentTransaction pending, GatewayCharge charge) {
@@ -429,19 +443,30 @@ public class TopUpService {
         return gateway.instructionsFrom(transaction.gatewayResponse());
     }
 
-    private void requireRoomInTheWallet(TopUpCommand command) {
-        BigDecimal balance = customerWallets.findByCustomerPrincipalId(command.customerPrincipalId())
+    private void requireRoomInTheWallet(PaymentTransaction pending) {
+        BigDecimal balance = customerWallets.findByCustomerPrincipalId(pending.principalId())
             .map(CustomerWallet::balance)
             .orElse(BigDecimal.ZERO);
-        BigDecimal balanceAfter = balance.add(command.amount());
+        BigDecimal awaitingPayment = transactions.pendingTopUpTotal(pending.principalId());
+        BigDecimal balanceAfter = balance.add(awaitingPayment).add(pending.amount());
         if (balanceAfter.compareTo(limits.maximumCustomerBalance()) > 0) {
             throw new TopUpLimitExceededException(
                 TopUpLimitExceededException.WALLET_BALANCE,
                 limits.maximumCustomerBalance(),
-                "this top-up would bring the wallet to IDR " + rupiah(balanceAfter) + ", above the IDR "
-                    + rupiah(limits.maximumCustomerBalance()) + " a customer wallet may hold"
+                roomRefusal(balanceAfter, awaitingPayment)
             );
         }
+    }
+
+    private String roomRefusal(BigDecimal balanceAfter, BigDecimal awaitingPayment) {
+        String limit = "above the IDR " + rupiah(limits.maximumCustomerBalance()) + " a customer wallet may hold";
+        if (awaitingPayment.signum() == 0) {
+            return "this top-up would bring the wallet to IDR " + rupiah(balanceAfter) + ", " + limit;
+        }
+
+        return "with IDR " + rupiah(awaitingPayment) + " in top-ups still awaiting payment, this top-up would bring "
+            + "the wallet to IDR " + rupiah(balanceAfter) + ", " + limit + "; a top-up that expires or fails stops "
+            + "counting";
     }
 
     private long validated(TopUpCommand command) {

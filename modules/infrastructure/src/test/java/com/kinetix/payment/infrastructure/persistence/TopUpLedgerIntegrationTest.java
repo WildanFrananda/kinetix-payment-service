@@ -9,12 +9,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.kinetix.payment.application.SettlementOutcome;
 import com.kinetix.payment.application.TopUpCommand;
 import com.kinetix.payment.application.TopUpLimits;
+import com.kinetix.payment.application.TopUpOutcome;
 import com.kinetix.payment.application.TopUpService;
 import com.kinetix.payment.domain.entity.AttentionReason;
 import com.kinetix.payment.domain.entity.CustomerWallet;
 import com.kinetix.payment.domain.entity.PaymentTransaction;
 import com.kinetix.payment.domain.entity.PaymentTransaction.PaymentMethod;
 import com.kinetix.payment.domain.entity.PaymentTransaction.TransactionStatus;
+import com.kinetix.payment.domain.exception.GatewayRefusedException;
 import com.kinetix.payment.domain.exception.IdempotencyConflictException;
 import com.kinetix.payment.domain.exception.TopUpLimitExceededException;
 import com.kinetix.payment.domain.gateway.GatewayCharge;
@@ -25,14 +27,23 @@ import com.kinetix.payment.domain.gateway.GatewayStatus;
 import com.kinetix.payment.domain.gateway.PaymentInstructions;
 import com.kinetix.payment.domain.gateway.VirtualAccountBank;
 import com.kinetix.payment.domain.port.AdvisoryLockPort;
+import com.kinetix.payment.domain.port.CustomerWalletRepositoryPort;
 import com.kinetix.payment.domain.port.PaymentGatewayPort;
 import com.kinetix.payment.domain.port.TransactionRunnerPort;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -186,6 +197,155 @@ class TopUpLedgerIntegrationTest {
     }
 
     @Test
+    void ofTwoTopUpsStartedTogetherWhoseSumCrossesTheLimitOnlyOneReachesTheGateway() throws Exception {
+        String customer = principal();
+        BigDecimal each = new BigDecimal("1200000");
+        List<GatewayChargeRequest> charged = new CopyOnWriteArrayList<>();
+        TopUpService service = topUps(
+            new RendezvousCustomerWallets(customerWalletRepository, 2, Duration.ofSeconds(2)),
+            new ScriptedGateway(
+                request -> {
+                    charged.add(request);
+                    return accepted(request);
+                },
+                reference -> null
+            )
+        );
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService callers = Executors.newFixedThreadPool(2);
+        List<Future<TopUpOutcome>> attempts = new ArrayList<>();
+        try {
+            for (int caller = 0; caller < 2; caller++) {
+                attempts.add(
+                    callers.submit(() -> {
+                        start.await();
+                        return service.requestTopUp(vaTopUp(customer, each));
+                    })
+                );
+            }
+
+            start.countDown();
+
+            List<TopUpOutcome> accepted = new ArrayList<>();
+            List<String> refused = new ArrayList<>();
+            for (Future<TopUpOutcome> attempt : attempts) {
+                try {
+                    accepted.add(attempt.get(30, TimeUnit.SECONDS));
+                } catch (ExecutionException failed) {
+                    if (!(failed.getCause() instanceof TopUpLimitExceededException limit)) {
+                        throw failed;
+                    }
+
+                    refused.add(limit.code());
+                }
+            }
+
+            assertAll(
+                () -> assertEquals(
+                    1,
+                    charged.size(),
+                    "two top-ups of " + each + " started together into an empty wallet both reached the gateway"
+                ),
+                () -> assertEquals(1, accepted.size()),
+                () -> assertEquals(List.of(TopUpLimitExceededException.WALLET_BALANCE), refused),
+                () -> assertEquals(
+                    1,
+                    paymentTransactionRepository.findPendingTopUpsOlderThan(Instant.now().plusSeconds(1), 100_000)
+                        .stream()
+                        .filter(transaction -> transaction.principalId().equals(customer))
+                        .count(),
+                    "the refused top-up was recorded"
+                )
+            );
+        } finally {
+            callers.shutdownNow();
+        }
+    }
+
+    @Test
+    void aTopUpAwaitingPaymentHoldsItsRoomUntilTheGatewayExpiresIt() {
+        String customer = principal();
+        TopUpService service = topUps(
+            new ScriptedGateway(TopUpLedgerIntegrationTest::accepted, reference -> concluded(GatewaySettlement.EXPIRED))
+        );
+        String first = service.requestTopUp(vaTopUp(customer, new BigDecimal("1500000")))
+            .transaction()
+            .referenceNumber();
+
+        TopUpLimitExceededException refused = assertThrows(
+            TopUpLimitExceededException.class,
+            () -> service.requestTopUp(vaTopUp(customer, new BigDecimal("1000000")))
+        );
+        service.settle(first);
+        TopUpOutcome afterExpiry = service.requestTopUp(vaTopUp(customer, new BigDecimal("1000000")));
+
+        assertAll(
+            () -> assertEquals(TopUpLimitExceededException.WALLET_BALANCE, refused.code()),
+            () -> assertEquals(
+                TransactionStatus.EXPIRED,
+                paymentTransactionRepository.findByReferenceNumber(first).orElseThrow().status()
+            ),
+            () -> assertEquals(TransactionStatus.PENDING, afterExpiry.transaction().status())
+        );
+    }
+
+    @Test
+    void aTopUpAwaitingPaymentHoldsItsRoomUntilTheGatewaySaysItFailed() {
+        String customer = principal();
+        TopUpService service = topUps(
+            new ScriptedGateway(TopUpLedgerIntegrationTest::accepted, reference -> concluded(GatewaySettlement.FAILED))
+        );
+        String first = service.requestTopUp(vaTopUp(customer, LIMIT)).transaction().referenceNumber();
+
+        assertThrows(
+            TopUpLimitExceededException.class,
+            () -> service.requestTopUp(vaTopUp(customer, new BigDecimal("1000")))
+        );
+        service.settle(first);
+        TopUpOutcome afterFailure = service.requestTopUp(vaTopUp(customer, LIMIT));
+
+        assertEquals(TransactionStatus.PENDING, afterFailure.transaction().status());
+    }
+
+    @Test
+    void aTopUpTheGatewayRefusedHoldsNoRoom() {
+        String customer = principal();
+        AtomicBoolean refuse = new AtomicBoolean(true);
+        TopUpService service = topUps(
+            new ScriptedGateway(
+                request -> refuse.getAndSet(false) ? refusedCharge() : accepted(request),
+                reference -> null
+            )
+        );
+
+        assertThrows(GatewayRefusedException.class, () -> service.requestTopUp(vaTopUp(customer, LIMIT)));
+        TopUpOutcome next = service.requestTopUp(vaTopUp(customer, LIMIT));
+
+        assertEquals(TransactionStatus.PENDING, next.transaction().status());
+    }
+
+    @Test
+    void aSettledTopUpCountsOnceInTheBalanceAndNoLongerAsAwaitingPayment() {
+        String customer = principal();
+        BigDecimal first = new BigDecimal("1500000");
+        TopUpService service = topUps(
+            new ScriptedGateway(TopUpLedgerIntegrationTest::accepted, reference -> settled(reference, first))
+        );
+        service.settle(service.requestTopUp(vaTopUp(customer, first)).transaction().referenceNumber());
+
+        assertThrows(
+            TopUpLimitExceededException.class,
+            () -> service.requestTopUp(vaTopUp(customer, new BigDecimal("500001")))
+        );
+        TopUpOutcome fits = service.requestTopUp(vaTopUp(customer, new BigDecimal("500000")));
+
+        assertAll(
+            () -> assertEquals(0, first.compareTo(balanceOf(customer))),
+            () -> assertEquals(TransactionStatus.PENDING, fits.transaction().status())
+        );
+    }
+
+    @Test
     void aLostNotificationIsReachedWhileOlderAbandonedTopUpsStillFillTheBatch() {
         String customer = principal();
         List<String> abandoned = List.of(
@@ -221,9 +381,13 @@ class TopUpLedgerIntegrationTest {
     }
 
     private TopUpService topUps(PaymentGatewayPort gateway) {
+        return topUps(customerWalletRepository, gateway);
+    }
+
+    private TopUpService topUps(CustomerWalletRepositoryPort customerWallets, PaymentGatewayPort gateway) {
         return new TopUpService(
             paymentTransactionRepository,
-            customerWalletRepository,
+            customerWallets,
             gateway,
             transactionRunner,
             advisoryLock,
@@ -312,6 +476,20 @@ class TopUpLedgerIntegrationTest {
             "{\"transaction_status\":\"settlement\"}",
             null
         );
+    }
+
+    private static GatewayCharge refusedCharge() {
+        return new GatewayCharge(
+            GatewayChargeOutcome.REFUSED,
+            null,
+            PaymentInstructions.none(),
+            "{\"status_code\":\"400\"}",
+            "the gateway refused the charge"
+        );
+    }
+
+    private static GatewayStatus concluded(GatewaySettlement settlement) {
+        return new GatewayStatus(settlement, null, null, "{\"transaction_status\":\"concluded\"}", null);
     }
 
     private static GatewayStatus stillPending(String reference) {

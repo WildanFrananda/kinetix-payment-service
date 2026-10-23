@@ -27,6 +27,7 @@ import com.kinetix.payment.domain.port.TopUpAlarmPort;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -94,6 +95,7 @@ class TopUpServiceTest {
             .thenAnswer(call -> Optional.ofNullable(rows.get(call.<String>getArgument(0))));
         when(customerWallets.save(any())).thenAnswer(call -> call.getArgument(0));
         when(transactions.findByPrincipalIdAndIdempotencyKey(any(), any())).thenReturn(Optional.empty());
+        when(transactions.pendingTopUpTotal(any())).thenReturn(BigDecimal.ZERO);
 
         service = new TopUpService(
             transactions,
@@ -235,7 +237,7 @@ class TopUpServiceTest {
     void aRaceOnTheSameKeyReplaysTheWinnerAndChargesNothing() {
         PaymentTransaction winner = charged("TOPUP-winner", AMOUNT);
         when(transactions.findByPrincipalIdAndIdempotencyKey(CUSTOMER, KEY))
-            .thenReturn(Optional.empty(), Optional.of(winner));
+            .thenReturn(Optional.empty(), Optional.empty(), Optional.of(winner));
         doThrow(new DuplicateIdempotencyKeyException("taken")).when(transactions).save(any());
 
         TopUpOutcome outcome = service.requestTopUp(vaTopUp());
@@ -595,6 +597,91 @@ class TopUpServiceTest {
         assertEquals(TopUpLimitExceededException.WALLET_BALANCE, refused.code());
         verifyNoInteractions(gateway);
         verify(transactions, never()).save(any());
+    }
+
+    @Test
+    void topUpsStillAwaitingPaymentCountAgainstTheWalletLimit() {
+        walletHolds("500000.00");
+        when(transactions.pendingTopUpTotal(CUSTOMER)).thenReturn(new BigDecimal("1450000.00"));
+
+        TopUpLimitExceededException refused = assertThrows(
+            TopUpLimitExceededException.class,
+            () -> service.requestTopUp(vaTopUp(new BigDecimal("50001")))
+        );
+
+        assertEquals(TopUpLimitExceededException.WALLET_BALANCE, refused.code());
+        assertTrue(
+            refused.getMessage().contains("IDR 1,450,000 in top-ups still awaiting payment"),
+            refused.getMessage()
+        );
+        verifyNoInteractions(gateway);
+        verify(transactions, never()).save(any());
+    }
+
+    @Test
+    void aTopUpThatExactlyFillsWhatTheBalanceAndTheTopUpsAwaitingPaymentLeaveIsCharged() {
+        walletHolds("500000.00");
+        when(transactions.pendingTopUpTotal(CUSTOMER)).thenReturn(new BigDecimal("1450000.00"));
+        when(gateway.charge(any())).thenReturn(accepted());
+
+        service.requestTopUp(vaTopUp(new BigDecimal("50000")));
+
+        verify(gateway).charge(any());
+    }
+
+    @Test
+    void theRoomIsCheckedAndThePendingTopUpRecordedInOneTransactionUnderTheWalletOwnersLock() {
+        List<Integer> transactionOf = new ArrayList<>();
+        doAnswer(call -> {
+            transactionOf.add(transactionRunner.insideTransaction() ? transactionRunner.transactions() : -1);
+            return null;
+        }).when(advisoryLock).lockWalletOwner(CUSTOMER);
+        when(transactions.pendingTopUpTotal(CUSTOMER)).thenAnswer(call -> {
+            transactionOf.add(transactionRunner.insideTransaction() ? transactionRunner.transactions() : -1);
+            return BigDecimal.ZERO;
+        });
+        doAnswer(call -> {
+            transactionOf.add(transactionRunner.insideTransaction() ? transactionRunner.transactions() : -1);
+            PaymentTransaction saved = call.getArgument(0);
+            rows.put(saved.referenceNumber(), saved);
+            return saved;
+        }).when(transactions).save(any());
+        AtomicBoolean chargedInsideATransaction = new AtomicBoolean(true);
+        when(gateway.charge(any())).thenAnswer(call -> {
+            chargedInsideATransaction.set(transactionRunner.insideTransaction());
+            return accepted();
+        });
+
+        service.requestTopUp(vaTopUp());
+
+        assertEquals(
+            List.of(1, 1, 1, 2),
+            transactionOf,
+            "the lock, the room check and the insert must share one transaction, and the gateway's reply its own"
+        );
+        assertFalse(chargedInsideATransaction.get(), "the gateway was called while the wallet owner's lock was held");
+        InOrder order = inOrder(advisoryLock, customerWallets, transactions, gateway);
+        order.verify(advisoryLock).lockWalletOwner(CUSTOMER);
+        order.verify(transactions).findByPrincipalIdAndIdempotencyKey(CUSTOMER, KEY);
+        order.verify(customerWallets).findByCustomerPrincipalId(CUSTOMER);
+        order.verify(transactions).pendingTopUpTotal(CUSTOMER);
+        order.verify(transactions).save(argThat((PaymentTransaction t) -> t.status() == TransactionStatus.PENDING));
+        order.verify(gateway).charge(any());
+    }
+
+    @Test
+    void aRetryThatFindsItsFirstAttemptOnceItHoldsTheLockIsReplayedNotRefused() {
+        PaymentTransaction first = charged("TOPUP-first", AMOUNT);
+        when(transactions.findByPrincipalIdAndIdempotencyKey(CUSTOMER, KEY))
+            .thenReturn(Optional.empty(), Optional.of(first));
+        when(transactions.pendingTopUpTotal(CUSTOMER)).thenReturn(LIMIT);
+
+        TopUpOutcome outcome = service.requestTopUp(vaTopUp());
+
+        assertTrue(outcome.replayed());
+        assertEquals("TOPUP-first", outcome.transaction().referenceNumber());
+        verify(transactions, never()).save(any());
+        verify(gateway, never()).charge(any());
     }
 
     @Test

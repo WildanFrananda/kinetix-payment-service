@@ -1,6 +1,7 @@
 package com.kinetix.payment.infrastructure.persistence;
 
 import jakarta.persistence.LockModeType;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.data.domain.Limit;
@@ -29,6 +30,16 @@ public interface PaymentTransactionJpaRepository extends JpaRepository<PaymentTr
         @Param("olderThan") Instant olderThan,
         Limit limit
     );
+
+    @Query(
+        """
+            SELECT SUM(t.amount) FROM PaymentTransactionJpaEntity t
+            WHERE t.principalId = :principalId
+              AND t.status = com.kinetix.payment.domain.entity.PaymentTransaction.TransactionStatus.PENDING
+              AND t.type = com.kinetix.payment.domain.entity.PaymentTransaction.TransactionType.TOPUP
+            """
+    )
+    BigDecimal sumOfPendingTopUps(@Param("principalId") String principalId);
 
     @Modifying
     @Query(
