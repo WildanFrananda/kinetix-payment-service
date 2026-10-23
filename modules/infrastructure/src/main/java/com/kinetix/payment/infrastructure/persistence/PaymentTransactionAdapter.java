@@ -5,6 +5,7 @@ import com.kinetix.payment.domain.port.PaymentTransactionRepositoryPort;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Component;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -40,6 +41,12 @@ public class PaymentTransactionAdapter implements PaymentTransactionRepositoryPo
         return jpaRepository.findPendingTopUpsOlderThan(olderThan, Limit.of(limit)).stream()
             .map(this::toDomain)
             .toList();
+    }
+
+    @Override
+    public BigDecimal pendingTopUpTotal(String principalId) {
+        BigDecimal total = jpaRepository.sumOfPendingTopUps(principalId);
+        return total == null ? BigDecimal.ZERO : total;
     }
 
     @Override

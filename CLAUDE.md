@@ -156,6 +156,12 @@ answered an empty 401 while identity's JWKS was unreachable: Spring renders thos
 - `AuthenticationRefusals` writes `401` for a missing or bad token and `503` when the token could not be
   checked (`AuthenticationServiceException`, which Spring raises for a JWKS outage and would otherwise rethrow
   as a `500`).
+- Its challenge is `WWW-Authenticate: Bearer`, or `Bearer error="…"` with the RFC 6750 code, and nothing else.
+  Spring Security 7.1's `BearerTokenAuthenticationEntryPoint` always adds `resource_metadata` built from the
+  request's own URL (a resolver returning null prints `"null"`), and Kong does not preserve the host, so every
+  401 named `http://kinetix-payment-service:8003`; its `error_description` was exception text. Seen and fixed
+  on 2026-10-22 (`…ForwardedByKongIsChallengedWithoutNamingPaymentsInternalHost`). The resource server still
+  serves `/.well-known/oauth-protected-resource` from the request host; Kong routes nothing there, keep it so.
 - `ErrorResponseController` replaces Boot's `/error` page, so whatever still reaches the container (an
   exception nothing mapped, a `sendError` from a filter) answers its status as `{"error": …}`, and a `500`
   never carries the exception's text.
@@ -172,11 +178,27 @@ The user ruled on 2026-10-21: a customer top-up is at most IDR 2,000,000 and a c
 IDR 2,000,000 (`TOP_UP_MAXIMUM_AMOUNT`, `CUSTOMER_WALLET_MAXIMUM_BALANCE`, required, checked by `TopUpLimits`
 at start). Both are checked before Midtrans is called and refused with `422` and a `code`
 (`TOP_UP_AMOUNT_ABOVE_LIMIT`, `WALLET_BALANCE_LIMIT_EXCEEDED`). A replay is never refused by them: its first
-request already passed. They limit what enters from outside: merchant and driver wallets, and refunds into a
-customer wallet, are not capped, because a refund returns the buyer's own money.
+request already passed. They limit what enters from outside: merchant and driver wallets are not capped.
 
-The balance check is on the balance at charge time, so two top-ups started together can both be paid and the
-second no longer fits. A settlement that cannot be credited is never left `PENDING`: it becomes
+**A refund credits in full, above the limit too** (the user's ruling, 2026-10-22). `RefundEscrow` and
+`RefundGoods` return the buyer's own money and never check the limit, so a customer wallet may hold more than
+IDR 2,000,000 after one. The limit governs top-ups only: such a wallet takes no top-up until it is spent below
+the limit, and a top-up already pending when the refund lands is set aside `BALANCE_LIMIT_EXCEEDED` at
+settlement.
+
+The room a top-up needs is the balance **plus every top-up of that customer still `PENDING`** plus this one.
+It is read under the wallet owner's advisory lock (`lockWalletOwner`, the lock settlement and escrow take), in
+the transaction that inserts the new `PENDING` row, and the gateway is called only after that commits. So of
+two top-ups started together whose sum crosses the limit, the second waits for the first's row and is refused
+`422` before Midtrans is called (`ofTwoTopUpsStartedTogetherWhoseSumCrossesTheLimitOnlyOneReachesTheGateway`).
+Until 2026-10-22 the check read the balance alone, so every top-up started before the first settled was
+charged, and the ones that no longer fitted were paid and set aside. The key is looked up again under the
+lock, so a retry that waited behind its own first attempt is replayed, not refused. A top-up stops counting
+when it leaves `PENDING`: settled (its amount is then in the balance), `FAILED`, `EXPIRED` or
+`NEEDS_ATTENTION`. An abandoned one holds its room until the gateway expires it and the notification or the
+sweep records that; there is no cancel.
+
+A settlement that cannot be credited is never left `PENDING`: it becomes
 `NEEDS_ATTENTION` with an `attention_reason`, leaves the sweep (which reads only `PENDING`), logs an error and
 counts `kinetix_payment_top_ups_needing_attention_total{reason}`. The reasons:
 
