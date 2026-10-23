@@ -239,3 +239,19 @@ escrow movement), which is how order's escrow calls already treat an absent wall
 is therefore not in a liability snapshot until money reaches it. Admins hold no wallet: a token whose role is
 not the wallet's kind is `403`, so an admin can neither open a wallet nor top up under its own principal. No
 endpoint reads another principal's wallet; that is the backoffice's, when it exists.
+
+## The JDK blocks eMudhra's compromised intermediates (CVE-2026-91403)
+
+eMudhra's intermediate CA keys were compromised in October 2026, and every JDK up to 21.0.13 still trusted the 16
+intermediates (CVE-2026-91403, CVSS 9.1; Oracle's and OpenJDK's alerts of 2026-10-21). The fixed builds are 21.0.13.0.2
+and later, which Temurin had not released on 2026-10-23. `security/jdk21-blocked.certs` is the `blocked.certs` that fix
+ships: OpenJDK's own converter (`BlockedCertsConverter.java`) run on `blocked.certs.pem`, both from openjdk/jdk21u at
+`85974eed` (8395142, "CA Enhancements"). It reproduces the 38 fingerprints this image's JDK already carried and adds 48,
+because the converter blocks every equivalent encoding of a certificate (two for RSA, four for ECDSA), not only the one
+fingerprint a blog lists. Updating Ubuntu's `ca-certificates` does nothing for it: Temurin reads its own files.
+
+Both stages of the Dockerfile install it over the JDK's file and refuse to build when the JDK already blocks something
+the file does not: that is a newer JDK, and the override must then be deleted, not left to shrink its blocklist. Measured
+on 2026-10-23 against a test server whose chain runs through `EM DV TLS CA - G3B`: the image before the override
+connected (HTTP 200), the image with it refused (`Untrusted certificate`), and Midtrans, FCM, Google OAuth and Resend still
+connected. Delete the file and both steps when the base image's JDK is 21.0.13.0.2 or later.

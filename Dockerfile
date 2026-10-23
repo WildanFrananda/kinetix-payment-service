@@ -1,5 +1,18 @@
 FROM gradle:8.14.6-jdk21@sha256:7b2acae5b993b21d5d74aa8bae0e5de69494a7e0a8e84a17bc35a0c4b1d17db5 AS build
 
+COPY security/jdk21-blocked.certs /tmp/jdk21-blocked.certs
+RUN set -eu; \
+    shipped="$JAVA_HOME/lib/security/blocked.certs"; \
+    sed 1d "$shipped" | sort > /tmp/shipped.fp; \
+    sed 1d /tmp/jdk21-blocked.certs | sort > /tmp/override.fp; \
+    if [ -n "$(comm -23 /tmp/shipped.fp /tmp/override.fp)" ]; then \
+      echo "this JDK blocks certificates security/jdk21-blocked.certs does not: remove the override"; \
+      exit 1; \
+    fi; \
+    cp /tmp/jdk21-blocked.certs "$shipped"; \
+    grep -qx 42C4ACCD12C4F59597925E1A08A7A90102608543809308D50EC427E118BA1493 "$shipped"; \
+    rm /tmp/jdk21-blocked.certs /tmp/shipped.fp /tmp/override.fp
+
 WORKDIR /src
 
 COPY settings.gradle build.gradle ./
@@ -33,6 +46,19 @@ FROM eclipse-temurin:21-jre@sha256:7a65df4b22d2de92d4e04056e884f3b9122d70b21e284
 RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
+
+COPY security/jdk21-blocked.certs /tmp/jdk21-blocked.certs
+RUN set -eu; \
+    shipped="$JAVA_HOME/lib/security/blocked.certs"; \
+    sed 1d "$shipped" | sort > /tmp/shipped.fp; \
+    sed 1d /tmp/jdk21-blocked.certs | sort > /tmp/override.fp; \
+    if [ -n "$(comm -23 /tmp/shipped.fp /tmp/override.fp)" ]; then \
+      echo "this JDK blocks certificates security/jdk21-blocked.certs does not: remove the override"; \
+      exit 1; \
+    fi; \
+    cp /tmp/jdk21-blocked.certs "$shipped"; \
+    grep -qx 42C4ACCD12C4F59597925E1A08A7A90102608543809308D50EC427E118BA1493 "$shipped"; \
+    rm /tmp/jdk21-blocked.certs /tmp/shipped.fp /tmp/override.fp
 
 RUN groupadd --system --gid 10001 payment \
     && useradd --system --uid 10001 --gid 10001 --no-create-home payment
