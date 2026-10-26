@@ -58,7 +58,7 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       # The .proto files are not in this repository; scripts/sync-contracts fetches them at a pinned commit
       # into .contracts/, which modules/infrastructure/build.gradle reads as a proto source directory. The
