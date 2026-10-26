@@ -1,4 +1,4 @@
-FROM gradle:8.14.6-jdk21@sha256:7b2acae5b993b21d5d74aa8bae0e5de69494a7e0a8e84a17bc35a0c4b1d17db5 AS build
+FROM gradle:8.14.6-jdk21@sha256:c71fc6625c18e889654adeb86c99974028bc888505f6e1fd7eccad057174877d AS build
 
 COPY security/jdk21-blocked.certs /tmp/jdk21-blocked.certs
 RUN set -eu; \
@@ -38,7 +38,7 @@ COPY modules ./modules
 RUN gradle --no-daemon :modules:api:bootJar -x test \
     && cp modules/api/build/libs/*.jar /src/application.jar
 
-FROM eclipse-temurin:21-jre@sha256:7a65df4b22d2de92d4e04056e884f3b9122d70b21e2847fd66084278bd0ce037 AS final
+FROM eclipse-temurin:21-jre@sha256:227118764cccd3c3294617061aaa93a08309c63a395eefa83e6b35032992ea99 AS final
 
 # The base is pinned by digest, which also means it stops receiving Ubuntu's security updates. CI's image
 # scan fails the build on a CRITICAL that has a fix available — eight of them on the first run — so the
