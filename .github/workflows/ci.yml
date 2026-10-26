@@ -51,14 +51,14 @@ jobs:
       CUSTOMER_WALLET_MAXIMUM_BALANCE: "2000000"
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       # The .proto files are not in this repository; scripts/sync-contracts fetches them at a pinned commit
       # into .contracts/, which modules/infrastructure/build.gradle reads as a proto source directory. The
@@ -85,7 +85,7 @@ jobs:
       # console logging shows neither, so the first red run said only "AssertionFailedError at
       # ReviewProbeIntegrationTest.java:416" — a concurrency failure with the evidence thrown away, and it
       # does not reproduce on demand. The XML carries the message and the standard output.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-results
