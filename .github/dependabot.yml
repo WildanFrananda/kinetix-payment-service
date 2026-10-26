@@ -34,6 +34,16 @@ updates:
         update-types:
           - minor
           - patch
+    # Liquibase 5 is licensed FSL-1.1-ALv2, not Apache. Payment stays on 4.33 (the app through
+    # ext['liquibase.version'], the changelog tool through liquibaseRuntime) until the owner decides to
+    # move. The 3.x Gradle plugin belongs to Liquibase 5 and fails against 4.33 with `liquibase/Scope`.
+    ignore:
+      - dependency-name: "org.liquibase:liquibase-core"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "org.liquibase.gradle"
+        update-types:
+          - version-update:semver-major
     commit-message:
       prefix: "deps"
   - package-ecosystem: github-actions
