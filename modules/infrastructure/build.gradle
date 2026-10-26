@@ -2,7 +2,7 @@ plugins {
     id 'java-library'
     id 'org.springframework.boot'
     id 'io.spring.dependency-management'
-    id 'com.google.protobuf' version '0.9.4'
+    id 'com.google.protobuf' version '0.10.0'
 }
 
 repositories {
@@ -39,11 +39,11 @@ tasks.named('bootJar') {
 
 protobuf {
     protoc {
-        artifact = "com.google.protobuf:protoc:4.35.1"
+        artifact = "com.google.protobuf:protoc:4.36.2"
     }
     plugins {
         grpc {
-            artifact = "io.grpc:protoc-gen-grpc-java:1.83.1"
+            artifact = "io.grpc:protoc-gen-grpc-java:1.85.1"
         }
     }
     generateProtoTasks {
