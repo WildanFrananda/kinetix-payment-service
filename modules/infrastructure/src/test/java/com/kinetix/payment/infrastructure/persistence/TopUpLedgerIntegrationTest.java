@@ -3,9 +3,13 @@ package com.kinetix.payment.infrastructure.persistence;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.kinetix.payment.application.CreateEscrowHoldCommand;
+import com.kinetix.payment.application.EscrowRequestFingerprint;
+import com.kinetix.payment.application.EscrowService;
 import com.kinetix.payment.application.SettlementOutcome;
 import com.kinetix.payment.application.TopUpCommand;
 import com.kinetix.payment.application.TopUpLimits;
@@ -72,6 +76,11 @@ class TopUpLedgerIntegrationTest {
     @Autowired private CustomerWalletAdapter customerWalletRepository;
     @Autowired private PaymentTransactionAdapter paymentTransactionRepository;
     @Autowired private PaymentTransactionJpaRepository jpaRepository;
+    @Autowired private EscrowAdapter escrowRepository;
+    @Autowired private MerchantWalletAdapter merchantWalletRepository;
+    @Autowired private DriverWalletAdapter driverWalletRepository;
+    @Autowired private SuspenseWalletAdapter suspenseWalletRepository;
+    @Autowired private EscrowIdempotencyAdapter idempotencyRepository;
 
     private final List<PaymentTransaction> alarms = new CopyOnWriteArrayList<>();
 
@@ -172,11 +181,13 @@ class TopUpLedgerIntegrationTest {
     }
 
     @Test
-    void aSettlementThatWouldOverfillTheWalletIsSetAsideCreditsNothingAndLeavesTheSweep() {
+    void aSettlementForAnotherAmountIsSetAsideCreditsNothingAndLeavesTheSweep() {
         String customer = principal();
-        seedCustomer(customer, new BigDecimal("1900000.00"));
+        seedCustomer(customer, new BigDecimal("100000.00"));
         String reference = pendingTopUp(customer, AMOUNT);
-        TopUpService service = topUps(new ScriptedGateway(request -> null, ref -> settled(ref, AMOUNT)));
+        TopUpService service = topUps(
+            new ScriptedGateway(request -> null, ref -> settled(ref, new BigDecimal("15000.00")))
+        );
 
         SettlementOutcome outcome = service.settle(reference);
 
@@ -189,10 +200,44 @@ class TopUpLedgerIntegrationTest {
         assertAll(
             () -> assertFalse(outcome.credited()),
             () -> assertEquals(TransactionStatus.NEEDS_ATTENTION, stored.status()),
-            () -> assertEquals(AttentionReason.BALANCE_LIMIT_EXCEEDED, stored.attentionReason()),
-            () -> assertEquals(0, new BigDecimal("1900000.00").compareTo(balanceOf(customer))),
+            () -> assertEquals(AttentionReason.AMOUNT_MISMATCH, stored.attentionReason()),
+            () -> assertEquals(0, new BigDecimal("100000.00").compareTo(balanceOf(customer))),
             () -> assertEquals(List.of(reference), alarms.stream().map(PaymentTransaction::referenceNumber).toList()),
             () -> assertFalse(swept.contains(reference), "a top-up set aside for attention is still swept")
+        );
+    }
+
+    @Test
+    void aTopUpPaidAfterARefundFilledTheWalletIsCreditedInFull() {
+        String customer = principal();
+        String order = "ORD-LEDGER-" + UUID.randomUUID();
+        BigDecimal checkout = new BigDecimal("1500000.00");
+        BigDecimal topUp = new BigDecimal("1500000.00");
+        seedCustomer(customer, LIMIT);
+        EscrowService escrow = escrow();
+        escrow.createEscrowHold(heldWithoutADriver(order, customer, checkout));
+        TopUpService service = topUps(
+            new ScriptedGateway(TopUpLedgerIntegrationTest::accepted, reference -> settled(reference, topUp))
+        );
+        String reference = service.requestTopUp(vaTopUp(customer, topUp)).transaction().referenceNumber();
+        escrow.refundEscrow(order, "cancelled by the buyer", "refund:" + order);
+        BigDecimal refunded = balanceOf(customer);
+
+        SettlementOutcome outcome = service.settle(reference);
+
+        PaymentTransaction stored = paymentTransactionRepository.findByReferenceNumber(reference).orElseThrow();
+        TopUpLimitExceededException next = assertThrows(
+            TopUpLimitExceededException.class,
+            () -> service.requestTopUp(vaTopUp(customer, new BigDecimal("1000")))
+        );
+        assertAll(
+            () -> assertEquals(0, LIMIT.compareTo(refunded), "the refund did not fill the wallet to the limit"),
+            () -> assertTrue(outcome.credited(), "a top-up the gateway reports paid was not credited"),
+            () -> assertEquals(TransactionStatus.SUCCESS, stored.status()),
+            () -> assertNull(stored.attentionReason()),
+            () -> assertEquals(0, new BigDecimal("3500000.00").compareTo(balanceOf(customer))),
+            () -> assertTrue(alarms.isEmpty(), "a paid top-up raised the attention alarm"),
+            () -> assertEquals(TopUpLimitExceededException.WALLET_BALANCE, next.code())
         );
     }
 
@@ -393,6 +438,37 @@ class TopUpLedgerIntegrationTest {
             advisoryLock,
             new TopUpLimits(LIMIT, LIMIT),
             alarms::add
+        );
+    }
+
+    private EscrowService escrow() {
+        return new EscrowService(
+            escrowRepository,
+            customerWalletRepository,
+            merchantWalletRepository,
+            driverWalletRepository,
+            suspenseWalletRepository,
+            paymentTransactionRepository,
+            idempotencyRepository,
+            transactionRunner,
+            advisoryLock
+        );
+    }
+
+    private static CreateEscrowHoldCommand heldWithoutADriver(String order, String customer, BigDecimal total) {
+        String merchant = "ledger-merchant-" + UUID.randomUUID();
+        BigDecimal shipping = new BigDecimal("20000.00");
+        BigDecimal merchantAmount = total.subtract(shipping);
+        return new CreateEscrowHoldCommand(
+            order,
+            customer,
+            merchant,
+            null,
+            total,
+            merchantAmount,
+            shipping,
+            "hold:" + order,
+            EscrowRequestFingerprint.forCreateHold(order, customer, merchant, null, total, merchantAmount, shipping)
         );
     }
 

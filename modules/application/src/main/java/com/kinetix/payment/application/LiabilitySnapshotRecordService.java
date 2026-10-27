@@ -1,6 +1,7 @@
 package com.kinetix.payment.application;
 
 import com.kinetix.payment.domain.entity.LiabilitySnapshotRecord;
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import com.kinetix.payment.domain.port.LiabilitySnapshotRecordPort;
 import java.util.Optional;
 import java.util.UUID;
@@ -18,18 +19,18 @@ public class LiabilitySnapshotRecordService {
 
     private static UUID parse(String snapshotId) {
         if (snapshotId == null) {
-            throw new IllegalArgumentException("a snapshot record is asked for by its snapshot id");
+            throw new InvalidArgumentException("a snapshot record is asked for by its snapshot id");
         }
 
         UUID id;
         try {
             id = UUID.fromString(snapshotId);
         } catch (IllegalArgumentException malformed) {
-            throw new IllegalArgumentException("'" + snapshotId + "' is not a snapshot id", malformed);
+            throw new InvalidArgumentException("'" + snapshotId + "' is not a snapshot id", malformed);
         }
 
         if (!id.toString().equals(snapshotId)) {
-            throw new IllegalArgumentException("'" + snapshotId + "' is not a snapshot id in canonical form");
+            throw new InvalidArgumentException("'" + snapshotId + "' is not a snapshot id in canonical form");
         }
 
         return id;

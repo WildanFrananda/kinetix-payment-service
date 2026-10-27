@@ -1,6 +1,7 @@
 package com.kinetix.payment.api.security;
 
 import jakarta.servlet.DispatcherType;
+import jakarta.servlet.Filter;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -19,7 +20,9 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.server.resource.web.OAuth2ProtectedResourceMetadataFilter;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
+import org.springframework.security.web.DefaultSecurityFilterChain;
 import org.springframework.security.web.SecurityFilterChain;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -30,7 +33,7 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http, JsonMapper json) throws Exception {
         AuthenticationRefusals refusals = new AuthenticationRefusals(json);
 
-        return http
+        DefaultSecurityFilterChain chain = http
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(
@@ -57,6 +60,15 @@ public class SecurityConfig {
             )
             .exceptionHandling(handling -> handling.authenticationEntryPoint(refusals))
             .build();
+
+        return withoutProtectedResourceMetadata(chain);
+    }
+
+    private static SecurityFilterChain withoutProtectedResourceMetadata(DefaultSecurityFilterChain chain) {
+        List<Filter> kept = chain.getFilters().stream()
+            .filter(filter -> !(filter instanceof OAuth2ProtectedResourceMetadataFilter))
+            .toList();
+        return new DefaultSecurityFilterChain(chain.getRequestMatcher(), kept);
     }
 
     @Bean

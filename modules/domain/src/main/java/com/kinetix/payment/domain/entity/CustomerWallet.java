@@ -1,6 +1,7 @@
 package com.kinetix.payment.domain.entity;
 
 import com.kinetix.payment.domain.exception.InsufficientBalanceException;
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -16,15 +17,15 @@ public record CustomerWallet(
 ) implements LiabilityHolder {
     public CustomerWallet {
         if (customerPrincipalId == null || customerPrincipalId.isBlank()) {
-            throw new IllegalArgumentException("A customer principal id is required");
+            throw new InvalidArgumentException("A customer principal id is required");
         }
 
         if (balance.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("Balance cannot be negative");
+            throw new InvalidArgumentException("Balance cannot be negative");
         }
 
         if (heldBalance.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("Held balance cannot be negative");
+            throw new InvalidArgumentException("Held balance cannot be negative");
         }
     }
 
@@ -42,7 +43,7 @@ public record CustomerWallet(
 
     public CustomerWallet topUp(BigDecimal amount) {
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Top-up amount must be positive");
+            throw new InvalidArgumentException("Top-up amount must be positive");
         }
 
         return new CustomerWallet(
@@ -58,7 +59,7 @@ public record CustomerWallet(
 
     public CustomerWallet deductForCheckout(BigDecimal amount) {
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Deduction amount must be positive");
+            throw new InvalidArgumentException("Deduction amount must be positive");
         }
 
         if (balance.compareTo(amount) < 0) {

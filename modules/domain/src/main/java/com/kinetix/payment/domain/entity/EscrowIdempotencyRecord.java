@@ -1,5 +1,6 @@
 package com.kinetix.payment.domain.entity;
 
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import java.time.Instant;
 
 public record EscrowIdempotencyRecord(
@@ -15,19 +16,19 @@ public record EscrowIdempotencyRecord(
 ) {
     public EscrowIdempotencyRecord {
         if (operation == null) {
-            throw new IllegalArgumentException("An escrow operation is required");
+            throw new InvalidArgumentException("An escrow operation is required");
         }
 
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            throw new IllegalArgumentException("An idempotency key is required");
+            throw new InvalidArgumentException("An idempotency key is required");
         }
 
         if (orderNumber == null || orderNumber.isBlank()) {
-            throw new IllegalArgumentException("An order number is required");
+            throw new InvalidArgumentException("An order number is required");
         }
 
         if (requestFingerprint == null || requestFingerprint.isBlank()) {
-            throw new IllegalArgumentException("A request fingerprint is required");
+            throw new InvalidArgumentException("A request fingerprint is required");
         }
     }
 

@@ -134,7 +134,12 @@ class LiabilityGrpcServerServiceTest {
         serve(List.of(CustomerWallet.createInitial(CUSTOMER).topUp(new BigDecimal("0.005"))), "IDR");
 
         assertFalse(call.completed);
-        assertRefused(Status.Code.FAILED_PRECONDITION, "LIABILITY_SNAPSHOT_REFUSED");
+        assertRefused(
+            Status.Code.FAILED_PRECONDITION,
+            "LIABILITY_SNAPSHOT_REFUSED",
+            "the IDR liability snapshot was abandoned because the ledger could not be reported exactly; "
+                + "payment's log names the cause"
+        );
     }
 
     @Test
@@ -142,7 +147,11 @@ class LiabilityGrpcServerServiceTest {
         serve(List.of(), "rupiah");
 
         assertTrue(call.sent.isEmpty());
-        assertRefused(Status.Code.INVALID_ARGUMENT, "INVALID_ARGUMENT");
+        assertRefused(
+            Status.Code.INVALID_ARGUMENT,
+            "INVALID_ARGUMENT",
+            "a liability snapshot is taken in one ISO 4217 currency, and 'rupiah' is not one"
+        );
     }
 
     @Test
@@ -156,7 +165,11 @@ class LiabilityGrpcServerServiceTest {
         new LiabilityGrpcServerService(new LiabilitySnapshotService(port, records), Duration.ofSeconds(1))
             .streamLiabilitySnapshot(request("IDR"), call);
 
-        assertRefused(Status.Code.UNAVAILABLE, "LIABILITY_SNAPSHOT_UNAVAILABLE");
+        assertRefused(
+            Status.Code.UNAVAILABLE,
+            "LIABILITY_SNAPSHOT_UNAVAILABLE",
+            "the ledger could not be read for a liability snapshot; retry it"
+        );
     }
 
     @Test
@@ -225,5 +238,12 @@ class LiabilityGrpcServerServiceTest {
         StatusRuntimeException refused = (StatusRuntimeException) call.error;
         assertEquals(code, refused.getStatus().getCode());
         assertEquals(errorCode, refused.getTrailers().get(ERROR_DETAIL).getErrorCode());
+    }
+
+    private void assertRefused(Status.Code code, String errorCode, String description) {
+        assertRefused(code, errorCode);
+        StatusRuntimeException refused = (StatusRuntimeException) call.error;
+        assertEquals(description, refused.getStatus().getDescription());
+        assertEquals(description, refused.getTrailers().get(ERROR_DETAIL).getMessage());
     }
 }

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.kinetix.payment.application.TopUpService;
 import com.kinetix.payment.application.WalletService;
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import com.kinetix.payment.domain.exception.TopUpLimitExceededException;
 import com.kinetix.payment.domain.port.PaymentGatewayPort;
 import java.io.IOException;
@@ -51,6 +52,8 @@ class HttpFailuresThroughTheFilterChainTest {
     private static final String BALANCE = "/api/v1/payment/wallet/customer/balance";
 
     private static final String NOTIFICATIONS = "/api/v1/payment/gateway/midtrans/notifications";
+
+    private static final String RESOURCE_METADATA = "/.well-known/oauth-protected-resource";
 
     private static final String KONG_UPSTREAM_HOST = "kinetix-payment-service:8003";
 
@@ -212,6 +215,63 @@ class HttpFailuresThroughTheFilterChainTest {
     }
 
     @Test
+    void theRefusalOfARequestWithoutATokenIsJsonLikeEveryOtherAnswer() throws Exception {
+        HttpResponse<String> refused = send(request(BALANCE).GET());
+        HttpResponse<String> forbidden = send(
+            request(BALANCE).header("Authorization", "Bearer " + IDENTITY.tokenFor(CUSTOMER, "admin")).GET()
+        );
+
+        assertRefusal(refused, 401);
+        assertRefusal(forbidden, 403);
+        assertEquals("application/json", contentTypeOf(forbidden));
+        assertEquals("application/json", contentTypeOf(refused));
+    }
+
+    @Test
+    void theProtectedResourceMetadataIsNotServedWithoutAToken() throws Exception {
+        HttpResponse<String> response = send(request(RESOURCE_METADATA).GET());
+
+        JsonNode body = assertRefusal(response, 401);
+        assertFalse(body.has("resource"), "payment served its protected resource metadata: " + response.body());
+        assertFalse(
+            response.body().contains("tls_client_certificate_bound_access_tokens"),
+            "payment served its protected resource metadata: " + response.body()
+        );
+    }
+
+    @Test
+    void theProtectedResourceMetadataIsNotServedToASignedInCallerEither() throws Exception {
+        HttpResponse<String> response = send(signedIn(RESOURCE_METADATA).GET());
+
+        JsonNode body = assertRefusal(response, 404);
+        assertFalse(body.has("resource"), "payment served its protected resource metadata: " + response.body());
+    }
+
+    @Test
+    void anArgumentCheckPaymentDidNotWriteIs400WithoutItsText() throws Exception {
+        when(walletService.findCustomerWallet(any())).thenThrow(
+            new IllegalArgumentException("No enum constant com.kinetix.payment.domain.entity.EscrowHold.EscrowStatus.X")
+        );
+
+        HttpResponse<String> response = send(signedIn(BALANCE).GET());
+
+        JsonNode body = assertRefusal(response, 400);
+        assertEquals("the request is not valid", body.get("error").asString(), response.body());
+    }
+
+    @Test
+    void anArgumentCheckPaymentWroteIs400AndSaysWhy() throws Exception {
+        when(topUpService.requestTopUp(any())).thenThrow(
+            new InvalidArgumentException("a virtual-account top-up needs a bank")
+        );
+
+        HttpResponse<String> response = send(topUpWith(TOP_UP_BODY));
+
+        JsonNode body = assertRefusal(response, 400);
+        assertEquals("a virtual-account top-up needs a bank", body.get("error").asString(), response.body());
+    }
+
+    @Test
     void aNotificationThatIsNotJsonIs400NotAnEmpty401() throws Exception {
         HttpResponse<String> response = send(notification("{\"order_id\":"));
 
@@ -367,6 +427,10 @@ class HttpFailuresThroughTheFilterChainTest {
 
             return new String(socket.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         }
+    }
+
+    private static String contentTypeOf(HttpResponse<String> response) {
+        return response.headers().firstValue("Content-Type").orElse(null);
     }
 
     private static String statusOf(String answer) {

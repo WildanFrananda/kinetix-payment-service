@@ -160,8 +160,14 @@ answered an empty 401 while identity's JWKS was unreachable: Spring renders thos
   Spring Security 7.1's `BearerTokenAuthenticationEntryPoint` always adds `resource_metadata` built from the
   request's own URL (a resolver returning null prints `"null"`), and Kong does not preserve the host, so every
   401 named `http://kinetix-payment-service:8003`; its `error_description` was exception text. Seen and fixed
-  on 2026-10-22 (`…ForwardedByKongIsChallengedWithoutNamingPaymentsInternalHost`). The resource server still
-  serves `/.well-known/oauth-protected-resource` from the request host; Kong routes nothing there, keep it so.
+  on 2026-10-22 (`…ForwardedByKongIsChallengedWithoutNamingPaymentsInternalHost`).
+- Payment does not serve `/.well-known/oauth-protected-resource` (2026-10-27). Spring Security 7.1 adds that
+  endpoint to every resource server with no switch to turn it off, and it advertised the request's own host and
+  certificate-bound tokens, which payment does not use; `SecurityConfig` drops `OAuth2ProtectedResourceMetadataFilter`
+  from the built chain. The path now answers like any unknown one: `401` without a token, `404` with one.
+- The `401` and `503` bodies `AuthenticationRefusals` writes are UTF-8 bytes under `Content-Type: application/json`,
+  like every Spring MVC answer. Until 2026-10-27 they went through `getWriter()`, which made Tomcat add
+  `;charset=ISO-8859-1`.
 - `ErrorResponseController` replaces Boot's `/error` page, so whatever still reaches the container (an
   exception nothing mapped, a `sendError` from a filter) answers its status as `{"error": …}`, and a `500`
   never carries the exception's text.
@@ -183,8 +189,13 @@ request already passed. They limit what enters from outside: merchant and driver
 **A refund credits in full, above the limit too** (the user's ruling, 2026-10-22). `RefundEscrow` and
 `RefundGoods` return the buyer's own money and never check the limit, so a customer wallet may hold more than
 IDR 2,000,000 after one. The limit governs top-ups only: such a wallet takes no top-up until it is spent below
-the limit, and a top-up already pending when the refund lands is set aside `BALANCE_LIMIT_EXCEEDED` at
-settlement.
+the limit.
+
+**A paid top-up is always credited** (ruled 2026-10-27). The wallet limit is checked once, when the top-up is
+created; a top-up Midtrans reports paid is credited in full at settlement even if the wallet then holds more than
+the limit. Until 2026-10-27 settlement checked the limit again, so a top-up already pending when a refund landed
+was paid at Midtrans and set aside `NEEDS_ATTENTION` / `BALANCE_LIMIT_EXCEEDED` instead of credited
+(`aTopUpPaidAfterARefundFilledTheWalletIsCreditedInFull`).
 
 The room a top-up needs is the balance **plus every top-up of that customer still `PENDING`** plus this one.
 It is read under the wallet owner's advisory lock (`lockWalletOwner`, the lock settlement and escrow take), in
@@ -202,15 +213,17 @@ A settlement that cannot be credited is never left `PENDING`: it becomes
 `NEEDS_ATTENTION` with an `attention_reason`, leaves the sweep (which reads only `PENDING`), logs an error and
 counts `kinetix_payment_top_ups_needing_attention_total{reason}`. The reasons:
 
-- `BALANCE_LIMIT_EXCEEDED`: crediting it would take the wallet over its limit.
+- `BALANCE_LIMIT_EXCEEDED`: written until 2026-10-27, when settlement stopped checking the limit. The value stays
+  in `AttentionReason` because rows set aside before then carry it; nothing writes it any more.
 - `AMOUNT_MISMATCH`: the gateway settled another amount than was charged.
 - `GATEWAY_HAS_NO_RECORD`: the gateway accepted the charge and, after the grace, no longer knows it.
 
 A charge that never got an answer and that the gateway still does not know after
 `kinetix.reconciliation.not-found-grace` (1h in `application.yml`, counted from creation) never reached it,
 and is concluded `FAILED`. Inside the grace it stays `PENDING`. Only the sweep concludes it; a notification never does.
-Resolving a set-aside top-up (refund at Midtrans, or credit once the wallet has room) is a person's decision
-and has no endpoint yet: it belongs to the planned backoffice, built here as an API when it is needed.
+Resolving a set-aside top-up (refund at Midtrans, or credit it) is a person's decision and has no endpoint yet:
+`settle` returns early for anything that is not `PENDING`, so neither the sweep nor a repeated notification
+touches it. It belongs to the planned backoffice, built here as an API when it is needed.
 
 Before this the sweep took the oldest 100 `PENDING` rows and these rows stayed `PENDING`, throwing `409` on
 every sweep, so 100 of them blocked every newer lost notification.
@@ -220,6 +233,23 @@ same window. Every time the gateway is asked about a top-up, `last_checked_at` i
 column alone, never through `save()`, which would write a stale copy over it), and the sweep takes rows never
 asked first, then the least recently asked. `aLostNotificationIsReachedWhileOlderAbandonedTopUpsStillFillTheBatch`
 fails with the old `ORDER BY created_at`.
+
+## No exception text crosses the wire
+
+Since 2026-10-27 a gRPC status description, its `ErrorDetail` trailer and an HTTP `error` body are either a sentence
+payment wrote for the caller or a fixed sentence; the exception goes to the log, where the request id already is
+(`RequestIdFilter` for HTTP, `PeerAuthorizationInterceptor` for gRPC). Until then `GrpcRefusal` copied any
+exception's message, so a database failure answered `ABORTED ESCROW_CONTENTION` with JDBC and SQL text, and the
+liability snapshot's refusal carried the JDK's arithmetic message. `GrpcRefusal.of` takes a string, not a
+`Throwable`, so each call site names its text.
+
+- Payment's own refusals are `DomainException` and its subclasses, and `InvalidArgumentException` for an argument
+  check. Every `IllegalArgumentException` payment throws is an `InvalidArgumentException`; a bare one at the boundary
+  came from the JDK or a library, answers `INVALID_ARGUMENT` / `400` with "the request is not valid", and is logged.
+- Ledger failures answer fixed sentences: `ABORTED ESCROW_CONTENTION` "the escrow ledger could not complete this
+  call; retry it", `UNAVAILABLE LIABILITY_SNAPSHOT_UNAVAILABLE` and `LIABILITY_SNAPSHOT_RECORD_UNAVAILABLE`.
+  `LIABILITY_SNAPSHOT_REFUSED` keeps its cause for the log and says only that the ledger could not be reported
+  exactly.
 
 ## The charge reply is written under the row's lock
 

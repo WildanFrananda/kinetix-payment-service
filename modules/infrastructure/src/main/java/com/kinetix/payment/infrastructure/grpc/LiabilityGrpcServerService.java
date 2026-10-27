@@ -2,6 +2,7 @@ package com.kinetix.payment.infrastructure.grpc;
 
 import com.kinetix.payment.application.LiabilitySnapshotService;
 import com.kinetix.payment.application.LiabilitySnapshotTotals;
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import com.kinetix.payment.domain.exception.LiabilitySnapshotRefusedException;
 import io.grpc.Context;
 import io.grpc.Status;
@@ -24,6 +25,8 @@ public class LiabilityGrpcServerService extends LiabilityServiceGrpc.LiabilitySe
     private static final Logger LOG = LoggerFactory.getLogger(LiabilityGrpcServerService.class);
 
     private static final Duration STALL_LIMIT = Duration.ofSeconds(30);
+
+    private static final String LEDGER_UNREADABLE = "the ledger could not be read for a liability snapshot; retry it";
 
     private final LiabilitySnapshotService snapshots;
     private final Duration stallLimit;
@@ -78,13 +81,18 @@ public class LiabilityGrpcServerService extends LiabilityServiceGrpc.LiabilitySe
             return status;
         }
 
+        if (failure instanceof InvalidArgumentException invalid) {
+            return GrpcRefusal.of(Status.INVALID_ARGUMENT, "INVALID_ARGUMENT", invalid.getMessage());
+        }
+
         if (failure instanceof IllegalArgumentException invalid) {
-            return GrpcRefusal.of(Status.INVALID_ARGUMENT, "INVALID_ARGUMENT", invalid);
+            LOG.warn("liability snapshot refused by an argument check payment did not write", invalid);
+            return GrpcRefusal.of(Status.INVALID_ARGUMENT, "INVALID_ARGUMENT", GrpcRefusal.INVALID_REQUEST);
         }
 
         if (failure instanceof LiabilitySnapshotRefusedException refused) {
-            LOG.error("liability snapshot refused: {}", refused.getMessage());
-            return GrpcRefusal.of(Status.FAILED_PRECONDITION, "LIABILITY_SNAPSHOT_REFUSED", refused);
+            LOG.error("liability snapshot refused", refused);
+            return GrpcRefusal.of(Status.FAILED_PRECONDITION, "LIABILITY_SNAPSHOT_REFUSED", refused.getMessage());
         }
 
         if (failure instanceof DataAccessException
@@ -92,7 +100,7 @@ public class LiabilityGrpcServerService extends LiabilityServiceGrpc.LiabilitySe
             || failure instanceof PersistenceException
         ) {
             LOG.warn("liability snapshot could not read the ledger", failure);
-            return GrpcRefusal.of(Status.UNAVAILABLE, "LIABILITY_SNAPSHOT_UNAVAILABLE", failure);
+            return GrpcRefusal.of(Status.UNAVAILABLE, "LIABILITY_SNAPSHOT_UNAVAILABLE", LEDGER_UNREADABLE);
         }
 
         LOG.error("liability snapshot failed", failure);

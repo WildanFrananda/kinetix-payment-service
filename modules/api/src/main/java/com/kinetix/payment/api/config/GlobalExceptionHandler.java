@@ -8,6 +8,7 @@ import com.kinetix.payment.domain.exception.GatewayRefusedException;
 import com.kinetix.payment.domain.exception.GatewayUnavailableException;
 import com.kinetix.payment.domain.exception.IdempotencyConflictException;
 import com.kinetix.payment.domain.exception.InsufficientBalanceException;
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import com.kinetix.payment.domain.exception.NotificationRejectedException;
 import com.kinetix.payment.domain.exception.TopUpLimitExceededException;
 import com.kinetix.payment.domain.exception.TopUpNotFoundException;
@@ -64,9 +65,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", ex.getMessage()));
     }
 
+    @ExceptionHandler(InvalidArgumentException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidArgument(InvalidArgumentException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", ex.getMessage()));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", ex.getMessage()));
+        LOG.warn("a request was refused by an argument check payment did not write", ex);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "the request is not valid"));
     }
 
     @ExceptionHandler(GatewayUnavailableException.class)

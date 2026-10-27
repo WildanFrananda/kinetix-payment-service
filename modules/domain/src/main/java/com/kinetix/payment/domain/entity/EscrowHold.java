@@ -1,5 +1,6 @@
 package com.kinetix.payment.domain.entity;
 
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import java.math.BigDecimal;
 import java.time.Instant;
 
@@ -20,19 +21,19 @@ public record EscrowHold(
 ) {
     public EscrowHold {
         if (customerPrincipalId == null || customerPrincipalId.isBlank()) {
-            throw new IllegalArgumentException("A customer principal id is required");
+            throw new InvalidArgumentException("A customer principal id is required");
         }
 
         if (merchantPrincipalId == null || merchantPrincipalId.isBlank()) {
-            throw new IllegalArgumentException("A merchant principal id is required");
+            throw new InvalidArgumentException("A merchant principal id is required");
         }
 
         if (goodsRefundedAmount == null || goodsRefundedAmount.signum() < 0) {
-            throw new IllegalArgumentException("The goods refunded from a hold cannot be negative or missing");
+            throw new InvalidArgumentException("The goods refunded from a hold cannot be negative or missing");
         }
 
         if (merchantAmount != null && goodsRefundedAmount.compareTo(merchantAmount) > 0) {
-            throw new IllegalArgumentException(
+            throw new InvalidArgumentException(
                 "order " + orderNumber + " cannot have refunded " + goodsRefundedAmount
                     + " of goods when the merchant's share was " + merchantAmount
             );
@@ -57,7 +58,7 @@ public record EscrowHold(
     ) {
         BigDecimal parts = merchantAmount.add(shippingFeeAmount);
         if (totalOrderAmount.compareTo(parts) != 0) {
-            throw new IllegalArgumentException(
+            throw new InvalidArgumentException(
                 "an escrow hold for order " + orderNumber + " does not balance: the customer is charged "
                     + totalOrderAmount + " but " + merchantAmount + " is owed to the merchant and "
                     + shippingFeeAmount + " to whoever delivers, which is " + parts
@@ -97,11 +98,11 @@ public record EscrowHold(
         }
 
         if (amount == null || amount.signum() <= 0) {
-            throw new IllegalArgumentException("a goods refund must be a positive amount");
+            throw new InvalidArgumentException("a goods refund must be a positive amount");
         }
 
         if (amount.compareTo(merchantAmountOutstanding()) > 0) {
-            throw new IllegalArgumentException(
+            throw new InvalidArgumentException(
                 "order " + orderNumber + " still holds " + merchantAmountOutstanding()
                     + " for the merchant, which cannot cover a goods refund of " + amount
             );
@@ -126,7 +127,7 @@ public record EscrowHold(
 
     public EscrowHold settleShippingFeeTo(String settledDriverPrincipalId) {
         if (settledDriverPrincipalId == null || settledDriverPrincipalId.isBlank()) {
-            throw new IllegalArgumentException(
+            throw new InvalidArgumentException(
                 "a shipping fee cannot be settled without naming the driver it is owed to"
             );
         }
