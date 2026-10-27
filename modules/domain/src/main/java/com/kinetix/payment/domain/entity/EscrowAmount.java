@@ -1,5 +1,6 @@
 package com.kinetix.payment.domain.entity;
 
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import java.math.BigDecimal;
 
 final class EscrowAmount {
@@ -7,7 +8,7 @@ final class EscrowAmount {
 
     static BigDecimal moving(BigDecimal amount) {
         if (amount == null || amount.signum() < 0) {
-            throw new IllegalArgumentException("an escrow movement cannot be negative or missing: " + amount);
+            throw new InvalidArgumentException("an escrow movement cannot be negative or missing: " + amount);
         }
 
         return amount;

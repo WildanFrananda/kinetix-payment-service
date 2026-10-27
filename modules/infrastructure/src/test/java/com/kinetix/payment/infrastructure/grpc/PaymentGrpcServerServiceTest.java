@@ -1,17 +1,31 @@
 package com.kinetix.payment.infrastructure.grpc;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.kinetix.payment.application.EscrowOutcome;
 import com.kinetix.payment.application.EscrowService;
 import com.kinetix.payment.domain.entity.EscrowHold;
 import com.kinetix.payment.domain.exception.DomainException;
+import common.v1.Common;
+import io.grpc.Metadata;
+import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
+import io.grpc.protobuf.ProtoUtils;
 import io.grpc.stub.StreamObserver;
+import jakarta.persistence.PersistenceException;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.TransactionSystemException;
 import payment.v1.Payment;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -24,6 +38,13 @@ class PaymentGrpcServerServiceTest {
     private static final String CUSTOMER = "9f1d4a3e-1c62-4d0a-9a7b-2f5c8e0b41d7";
     private static final String MERCHANT = "3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3";
     private static final String DRIVER = "b7e2c05f-9a34-4c88-b1d6-0e7a3f52d914";
+    private static final String SQL_TEXT =
+        "could not execute statement [ERROR: deadlock detected Detail: Process 4711 waits for ShareLock on "
+            + "transaction 99] [update customer_wallets set balance=? where id=?]; SQL [update customer_wallets "
+            + "set balance=? where id=?]";
+    private static final String LEDGER_FAILED = "the escrow ledger could not complete this call; retry it";
+    private static final Metadata.Key<Common.ErrorDetail> ERROR_DETAIL =
+        ProtoUtils.keyForProto(Common.ErrorDetail.getDefaultInstance());
 
     private EscrowService escrowService;
     private PaymentGrpcServerService server;
@@ -118,6 +139,82 @@ class PaymentGrpcServerServiceTest {
         assertInstanceOf(StatusRuntimeException.class, observer.error);
     }
 
+    @Test
+    void aLedgerFailureIsAbortedWithAFixedDescriptionAndNeverTheDatabaseText() {
+        List<RuntimeException> failures = List.of(
+            new DataIntegrityViolationException(SQL_TEXT),
+            new CannotAcquireLockException(SQL_TEXT),
+            new TransactionSystemException(SQL_TEXT),
+            new PersistenceException(SQL_TEXT)
+        );
+        for (RuntimeException failure : failures) {
+            CapturingObserver answered = new CapturingObserver();
+            doThrow(failure).when(escrowService).settleShippingFee(any(), any());
+
+            server.settleShippingFee(request(DRIVER), answered);
+
+            StatusRuntimeException refused = assertInstanceOf(StatusRuntimeException.class, answered.error);
+            String seen = failure.getClass().getSimpleName() + " answered " + refused.getStatus();
+            assertEquals(Status.Code.ABORTED, refused.getStatus().getCode(), seen);
+            assertEquals(LEDGER_FAILED, refused.getStatus().getDescription(), seen);
+            assertEquals("ESCROW_CONTENTION", refused.getTrailers().get(ERROR_DETAIL).getErrorCode(), seen);
+            assertEquals(LEDGER_FAILED, refused.getTrailers().get(ERROR_DETAIL).getMessage(), seen);
+        }
+    }
+
+    @Test
+    void aLedgerFailureIsLoggedWithItsExceptionUnderTheCallersRequestId() {
+        ListAppender<ILoggingEvent> captured = new ListAppender<>();
+        Logger logger = (Logger) LoggerFactory.getLogger(PaymentGrpcServerService.class);
+        captured.start();
+        logger.addAppender(captured);
+        when(escrowService.settleShippingFee(any(), any()))
+            .thenThrow(new DataIntegrityViolationException(SQL_TEXT));
+        MDC.put("requestId", "req-escrow-1");
+        try {
+            server.settleShippingFee(request(DRIVER), observer);
+        } finally {
+            MDC.remove("requestId");
+            logger.detachAppender(captured);
+        }
+
+        ILoggingEvent logged = captured.list.getFirst();
+        assertEquals("req-escrow-1", logged.getMDCPropertyMap().get("requestId"));
+        assertEquals(DataIntegrityViolationException.class.getName(), logged.getThrowableProxy().getClassName());
+        assertEquals(SQL_TEXT, logged.getThrowableProxy().getMessage());
+    }
+
+    @Test
+    void anArgumentCheckPaymentDidNotWriteIsRefusedWithoutItsText() {
+        when(escrowService.settleShippingFee(any(), any())).thenThrow(
+            new IllegalArgumentException(
+                "No enum constant com.kinetix.payment.domain.entity.EscrowHold.EscrowStatus.SHIPPED"
+            )
+        );
+
+        server.settleShippingFee(request(DRIVER), observer);
+
+        StatusRuntimeException refused = assertInstanceOf(StatusRuntimeException.class, observer.error);
+        assertEquals(Status.Code.INVALID_ARGUMENT, refused.getStatus().getCode());
+        assertEquals("the request is not valid", refused.getStatus().getDescription());
+        assertEquals("INVALID_ARGUMENT", refused.getTrailers().get(ERROR_DETAIL).getErrorCode());
+        assertEquals("the request is not valid", refused.getTrailers().get(ERROR_DETAIL).getMessage());
+    }
+
+    @Test
+    void paymentsOwnRefusalStillSaysWhy() {
+        when(escrowService.settleShippingFee(any(), any()))
+            .thenThrow(new DomainException("escrow for order ORD-2001 is RELEASED"));
+
+        server.settleShippingFee(request(DRIVER), observer);
+
+        StatusRuntimeException refused = assertInstanceOf(StatusRuntimeException.class, observer.error);
+        assertEquals(Status.Code.FAILED_PRECONDITION, refused.getStatus().getCode());
+        assertEquals("escrow for order ORD-2001 is RELEASED", refused.getStatus().getDescription());
+        assertEquals("ESCROW_REFUSED", refused.getTrailers().get(ERROR_DETAIL).getErrorCode());
+        assertEquals("escrow for order ORD-2001 is RELEASED", refused.getTrailers().get(ERROR_DETAIL).getMessage());
+    }
+
     private static Payment.RefundGoodsRequest goodsRefund(long minor, String currency) {
         return Payment.RefundGoodsRequest.newBuilder()
             .setOrderNumber(ORDER)
@@ -149,11 +246,9 @@ class PaymentGrpcServerServiceTest {
     void aGoodsRefundInAnotherCurrencyIsRefusedRatherThanReadAsRupiah() {
         server.refundGoods(goodsRefund(4_000_000L, "USD"), observer);
 
-        assertInstanceOf(StatusRuntimeException.class, observer.error);
-        assertEquals(
-            io.grpc.Status.Code.INVALID_ARGUMENT,
-            ((StatusRuntimeException) observer.error).getStatus().getCode()
-        );
+        StatusRuntimeException refused = assertInstanceOf(StatusRuntimeException.class, observer.error);
+        assertEquals(Status.Code.INVALID_ARGUMENT, refused.getStatus().getCode());
+        assertEquals("a goods refund is in IDR, not 'USD'", refused.getStatus().getDescription());
         verifyNoInteractions(escrowService);
     }
 

@@ -1,5 +1,6 @@
 package com.kinetix.payment.domain.entity;
 
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -17,15 +18,15 @@ public record SuspenseWallet(
 
     public SuspenseWallet {
         if (purpose == null || purpose.isBlank()) {
-            throw new IllegalArgumentException("A suspense purpose is required");
+            throw new InvalidArgumentException("A suspense purpose is required");
         }
 
         if (availableBalance.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("Available balance cannot be negative");
+            throw new InvalidArgumentException("Available balance cannot be negative");
         }
 
         if (pendingEscrowBalance.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("Pending escrow balance cannot be negative");
+            throw new InvalidArgumentException("Pending escrow balance cannot be negative");
         }
     }
 
@@ -79,11 +80,11 @@ public record SuspenseWallet(
 
     public SuspenseWallet debitAvailable(BigDecimal amount) {
         if (amount == null || amount.signum() <= 0) {
-            throw new IllegalArgumentException("A suspense payout must be a positive amount");
+            throw new InvalidArgumentException("A suspense payout must be a positive amount");
         }
 
         if (availableBalance.compareTo(amount) < 0) {
-            throw new IllegalArgumentException(
+            throw new InvalidArgumentException(
                 "suspense wallet " + purpose + " holds " + availableBalance
                     + " and cannot pay out " + amount
             );

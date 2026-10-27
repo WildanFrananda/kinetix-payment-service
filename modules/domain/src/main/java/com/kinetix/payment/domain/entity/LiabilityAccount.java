@@ -1,5 +1,6 @@
 package com.kinetix.payment.domain.entity;
 
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import java.math.BigDecimal;
 
 public record LiabilityAccount(
@@ -10,21 +11,21 @@ public record LiabilityAccount(
 ) {
     public LiabilityAccount {
         if (kind == null) {
-            throw new IllegalArgumentException("a liability names what kind of balance it is");
+            throw new InvalidArgumentException("a liability names what kind of balance it is");
         }
 
         if (holder == null || holder.isBlank()) {
-            throw new IllegalArgumentException("a " + kind + " liability names who it is owed to");
+            throw new InvalidArgumentException("a " + kind + " liability names who it is owed to");
         }
 
         if (balance == null || balance.signum() < 0) {
-            throw new IllegalArgumentException(
+            throw new InvalidArgumentException(
                 "the " + kind + " owed to " + holder + " is " + balance + ", and a liability is never negative"
             );
         }
 
         if (currency == null || currency.isBlank()) {
-            throw new IllegalArgumentException("the " + kind + " owed to " + holder + " has no currency");
+            throw new InvalidArgumentException("the " + kind + " owed to " + holder + " has no currency");
         }
     }
 

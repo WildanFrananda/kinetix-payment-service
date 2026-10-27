@@ -1,5 +1,6 @@
 package com.kinetix.payment.domain.entity;
 
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -15,15 +16,15 @@ public record DriverWallet(
 ) implements LiabilityHolder {
     public DriverWallet {
         if (driverPrincipalId == null || driverPrincipalId.isBlank()) {
-            throw new IllegalArgumentException("A driver principal id is required");
+            throw new InvalidArgumentException("A driver principal id is required");
         }
 
         if (availableBalance.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("Available balance cannot be negative");
+            throw new InvalidArgumentException("Available balance cannot be negative");
         }
 
         if (pendingEscrowBalance.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("Pending escrow balance cannot be negative");
+            throw new InvalidArgumentException("Pending escrow balance cannot be negative");
         }
     }
 
@@ -65,7 +66,7 @@ public record DriverWallet(
 
     public DriverWallet creditAvailable(BigDecimal amount) {
         if (amount == null || amount.signum() <= 0) {
-            throw new IllegalArgumentException("a credit to a driver must be a positive amount");
+            throw new InvalidArgumentException("a credit to a driver must be a positive amount");
         }
 
         return new DriverWallet(

@@ -10,6 +10,7 @@ import com.kinetix.payment.domain.exception.DomainException;
 import com.kinetix.payment.domain.exception.EscrowNotFoundException;
 import com.kinetix.payment.domain.exception.IdempotencyConflictException;
 import com.kinetix.payment.domain.exception.InsufficientBalanceException;
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import common.v1.Common;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
@@ -31,6 +32,8 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
     private static final Logger LOG = LoggerFactory.getLogger(PaymentGrpcServerService.class);
 
     private static final BigDecimal MINOR_PER_MAJOR = new BigDecimal("100");
+
+    private static final String LEDGER_FAILED = "the escrow ledger could not complete this call; retry it";
 
     private final EscrowService escrowService;
 
@@ -236,23 +239,28 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
 
     private static StatusRuntimeException toStatusException(RuntimeException failure) {
         if (failure instanceof IdempotencyConflictException conflict) {
-            return refusal(Status.INVALID_ARGUMENT, "IDEMPOTENCY_KEY_REUSED", conflict);
+            return GrpcRefusal.of(Status.INVALID_ARGUMENT, "IDEMPOTENCY_KEY_REUSED", conflict.getMessage());
+        }
+
+        if (failure instanceof InvalidArgumentException invalid) {
+            return GrpcRefusal.of(Status.INVALID_ARGUMENT, "INVALID_ARGUMENT", invalid.getMessage());
         }
 
         if (failure instanceof IllegalArgumentException invalid) {
-            return refusal(Status.INVALID_ARGUMENT, "INVALID_ARGUMENT", invalid);
+            LOG.warn("escrow call refused by an argument check payment did not write", invalid);
+            return GrpcRefusal.of(Status.INVALID_ARGUMENT, "INVALID_ARGUMENT", GrpcRefusal.INVALID_REQUEST);
         }
 
         if (failure instanceof EscrowNotFoundException notFound) {
-            return refusal(Status.NOT_FOUND, "ESCROW_NOT_FOUND", notFound);
+            return GrpcRefusal.of(Status.NOT_FOUND, "ESCROW_NOT_FOUND", notFound.getMessage());
         }
 
         if (failure instanceof InsufficientBalanceException insufficient) {
-            return refusal(Status.FAILED_PRECONDITION, "INSUFFICIENT_BALANCE", insufficient);
+            return GrpcRefusal.of(Status.FAILED_PRECONDITION, "INSUFFICIENT_BALANCE", insufficient.getMessage());
         }
 
         if (failure instanceof DomainException refused) {
-            return refusal(Status.FAILED_PRECONDITION, "ESCROW_REFUSED", refused);
+            return GrpcRefusal.of(Status.FAILED_PRECONDITION, "ESCROW_REFUSED", refused.getMessage());
         }
 
         if (failure instanceof DataAccessException
@@ -260,7 +268,7 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
             || failure instanceof PersistenceException
         ) {
             LOG.warn("escrow call aborted on contention", failure);
-            return refusal(Status.ABORTED, "ESCROW_CONTENTION", failure);
+            return GrpcRefusal.of(Status.ABORTED, "ESCROW_CONTENTION", LEDGER_FAILED);
         }
 
         LOG.error("escrow call failed", failure);
@@ -269,17 +277,13 @@ public class PaymentGrpcServerService extends PaymentServiceGrpc.PaymentServiceI
             .asRuntimeException();
     }
 
-    private static StatusRuntimeException refusal(Status status, String errorCode, Throwable cause) {
-        return GrpcRefusal.of(status, errorCode, cause);
-    }
-
     private static BigDecimal goodsRefundOf(Payment.RefundGoodsRequest request) {
         if (!request.hasAmount()) {
-            throw new IllegalArgumentException("a goods refund names the amount to refund");
+            throw new InvalidArgumentException("a goods refund names the amount to refund");
         }
 
         if (!"IDR".equals(request.getAmount().getCurrency())) {
-            throw new IllegalArgumentException(
+            throw new InvalidArgumentException(
                 "a goods refund is in IDR, not '" + request.getAmount().getCurrency() + "'"
             );
         }

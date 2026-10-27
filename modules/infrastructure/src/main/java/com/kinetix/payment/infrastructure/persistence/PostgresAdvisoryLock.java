@@ -1,5 +1,6 @@
 package com.kinetix.payment.infrastructure.persistence;
 
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import com.kinetix.payment.domain.port.AdvisoryLockPort;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
@@ -34,7 +35,7 @@ public class PostgresAdvisoryLock implements AdvisoryLockPort {
 
     private void acquire(int namespace, String key) {
         if (key == null || key.isBlank()) {
-            throw new IllegalArgumentException("an advisory lock needs a key to hash");
+            throw new InvalidArgumentException("an advisory lock needs a key to hash");
         }
 
         if (!TransactionSynchronizationManager.isActualTransactionActive()) {

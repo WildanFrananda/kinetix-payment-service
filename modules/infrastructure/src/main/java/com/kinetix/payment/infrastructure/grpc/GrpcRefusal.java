@@ -7,13 +7,15 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.protobuf.ProtoUtils;
 
 final class GrpcRefusal {
+    static final String INVALID_REQUEST = "the request is not valid";
+
     private static final Metadata.Key<Common.ErrorDetail> ERROR_DETAIL =
         ProtoUtils.keyForProto(Common.ErrorDetail.getDefaultInstance());
 
     private GrpcRefusal() {}
 
-    static StatusRuntimeException of(Status status, String errorCode, Throwable cause) {
-        String message = cause.getMessage() == null ? errorCode : cause.getMessage();
+    static StatusRuntimeException of(Status status, String errorCode, String description) {
+        String message = description == null || description.isBlank() ? errorCode : description;
         Metadata trailers = new Metadata();
         trailers.put(
             ERROR_DETAIL,

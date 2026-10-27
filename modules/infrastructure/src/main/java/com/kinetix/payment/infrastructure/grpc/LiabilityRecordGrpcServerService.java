@@ -5,13 +5,13 @@ import com.google.protobuf.Timestamp;
 import com.kinetix.payment.application.LiabilitySnapshotRecordService;
 import com.kinetix.payment.domain.entity.LiabilitySnapshotRecord;
 import com.kinetix.payment.domain.entity.MinorUnits;
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import common.v1.Common;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 import jakarta.persistence.PersistenceException;
 import java.util.HexFormat;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +24,8 @@ import payment.v1.LiabilityRecordServiceGrpc;
 @GrpcService
 public class LiabilityRecordGrpcServerService extends LiabilityRecordServiceGrpc.LiabilityRecordServiceImplBase {
     private static final Logger LOG = LoggerFactory.getLogger(LiabilityRecordGrpcServerService.class);
+
+    private static final String RECORD_UNREADABLE = "the liability snapshot record could not be read; retry it";
 
     private final LiabilitySnapshotRecordService records;
 
@@ -49,7 +51,7 @@ public class LiabilityRecordGrpcServerService extends LiabilityRecordServiceGrpc
                 GrpcRefusal.of(
                     Status.NOT_FOUND,
                     "LIABILITY_SNAPSHOT_RECORD_NOT_FOUND",
-                    new NoSuchElementException("no liability snapshot " + request.getSnapshotId() + " was ever taken")
+                    "no liability snapshot " + request.getSnapshotId() + " was ever taken"
                 )
             );
             return;
@@ -79,8 +81,13 @@ public class LiabilityRecordGrpcServerService extends LiabilityRecordServiceGrpc
     }
 
     private static StatusRuntimeException toStatusException(RuntimeException failure) {
+        if (failure instanceof InvalidArgumentException invalid) {
+            return GrpcRefusal.of(Status.INVALID_ARGUMENT, "INVALID_ARGUMENT", invalid.getMessage());
+        }
+
         if (failure instanceof IllegalArgumentException invalid) {
-            return GrpcRefusal.of(Status.INVALID_ARGUMENT, "INVALID_ARGUMENT", invalid);
+            LOG.warn("a liability snapshot record was refused by an argument check payment did not write", invalid);
+            return GrpcRefusal.of(Status.INVALID_ARGUMENT, "INVALID_ARGUMENT", GrpcRefusal.INVALID_REQUEST);
         }
 
         if (failure instanceof DataAccessException
@@ -88,7 +95,7 @@ public class LiabilityRecordGrpcServerService extends LiabilityRecordServiceGrpc
             || failure instanceof PersistenceException
         ) {
             LOG.warn("a liability snapshot record could not be read", failure);
-            return GrpcRefusal.of(Status.UNAVAILABLE, "LIABILITY_SNAPSHOT_RECORD_UNAVAILABLE", failure);
+            return GrpcRefusal.of(Status.UNAVAILABLE, "LIABILITY_SNAPSHOT_RECORD_UNAVAILABLE", RECORD_UNREADABLE);
         }
 
         LOG.error("a liability snapshot record could not be served", failure);

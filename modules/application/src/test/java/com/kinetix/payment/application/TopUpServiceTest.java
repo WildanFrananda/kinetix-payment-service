@@ -40,6 +40,7 @@ import org.mockito.InOrder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -699,19 +700,34 @@ class TopUpServiceTest {
     }
 
     @Test
-    void aSettlementThatWouldTakeTheBalanceOverTheLimitIsSetAsideAndRaisesTheAlarm() {
+    void aPaidTopUpIsCreditedInFullEvenWhenARefundFilledTheWalletWhileItAwaitedPayment() {
         recorded(charged(REFERENCE, AMOUNT));
         walletHolds("1980000.00");
         when(gateway.statusOf(REFERENCE)).thenReturn(gatewaySays(GatewaySettlement.SETTLED, "50000.00"));
 
         SettlementOutcome outcome = service.settle(REFERENCE);
 
-        assertFalse(outcome.credited());
-        assertEquals(TransactionStatus.NEEDS_ATTENTION, outcome.transaction().status());
-        assertEquals(AttentionReason.BALANCE_LIMIT_EXCEEDED, outcome.transaction().attentionReason());
-        assertEquals("mid-tx-1", outcome.transaction().externalTransactionId());
-        verify(customerWallets, never()).save(any());
-        verify(alarm).setAside(outcome.transaction());
+        assertTrue(outcome.credited());
+        assertEquals(TransactionStatus.SUCCESS, outcome.transaction().status());
+        assertNull(outcome.transaction().attentionReason());
+        ArgumentCaptor<CustomerWallet> wallet = ArgumentCaptor.forClass(CustomerWallet.class);
+        verify(customerWallets).save(wallet.capture());
+        assertEquals(0, new BigDecimal("2030000.00").compareTo(wallet.getValue().balance()));
+        verifyNoInteractions(alarm);
+    }
+
+    @Test
+    void aWalletAboveTheLimitAfterACreditTakesNoNewTopUp() {
+        walletHolds("2030000.00");
+
+        TopUpLimitExceededException refused = assertThrows(
+            TopUpLimitExceededException.class,
+            () -> service.requestTopUp(vaTopUp(new BigDecimal("1000")))
+        );
+
+        assertEquals(TopUpLimitExceededException.WALLET_BALANCE, refused.code());
+        verifyNoInteractions(gateway);
+        verify(transactions, never()).save(any());
     }
 
     @Test

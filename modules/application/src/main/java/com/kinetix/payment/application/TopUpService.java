@@ -10,6 +10,7 @@ import com.kinetix.payment.domain.exception.DuplicateIdempotencyKeyException;
 import com.kinetix.payment.domain.exception.GatewayRefusedException;
 import com.kinetix.payment.domain.exception.GatewayUnavailableException;
 import com.kinetix.payment.domain.exception.IdempotencyConflictException;
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import com.kinetix.payment.domain.exception.TopUpLimitExceededException;
 import com.kinetix.payment.domain.exception.TopUpNotFoundException;
 import com.kinetix.payment.domain.gateway.GatewayCharge;
@@ -284,17 +285,6 @@ public class TopUpService {
 
         CustomerWallet wallet = customerWallets.findByCustomerPrincipalIdForUpdate(pending.principalId())
             .orElseGet(() -> CustomerWallet.createInitial(pending.principalId()));
-        BigDecimal balanceAfter = wallet.balance().add(pending.amount());
-        if (balanceAfter.compareTo(limits.maximumCustomerBalance()) > 0) {
-            return setAside(
-                pending,
-                AttentionReason.BALANCE_LIMIT_EXCEEDED,
-                truth,
-                "crediting it would bring the wallet to " + balanceAfter + ", above the "
-                    + limits.maximumCustomerBalance() + " a customer wallet may hold"
-            );
-        }
-
         customerWallets.save(wallet.topUp(pending.amount()));
 
         PaymentTransaction settled = transactions.save(
@@ -471,17 +461,17 @@ public class TopUpService {
 
     private long validated(TopUpCommand command) {
         if (command.customerPrincipalId() == null || command.customerPrincipalId().isBlank()) {
-            throw new IllegalArgumentException("a customer principal id is required");
+            throw new InvalidArgumentException("a customer principal id is required");
         }
 
         if (command.idempotencyKey() == null || !IDEMPOTENCY_KEY.matcher(command.idempotencyKey()).matches()) {
-            throw new IllegalArgumentException(
+            throw new InvalidArgumentException(
                 "an Idempotency-Key of 1 to 128 characters from A-Z a-z 0-9 . _ : - is required"
             );
         }
 
         if (command.amount() == null || command.amount().compareTo(MINIMUM_AMOUNT) < 0) {
-            throw new IllegalArgumentException("the minimum top-up is IDR 1,000");
+            throw new InvalidArgumentException("the minimum top-up is IDR 1,000");
         }
 
         if (command.amount().compareTo(limits.maximumTopUp()) > 0) {
@@ -494,7 +484,7 @@ public class TopUpService {
 
         BigDecimal whole = command.amount().stripTrailingZeros();
         if (whole.scale() > 0) {
-            throw new IllegalArgumentException(
+            throw new InvalidArgumentException(
                 "a rupiah top-up is a whole amount; "
                     + command.amount().toPlainString() + " has a fraction the gateway cannot charge"
             );
@@ -502,14 +492,14 @@ public class TopUpService {
 
         if (command.method() == PaymentMethod.MIDTRANS_VA) {
             if (command.bank() == null) {
-                throw new IllegalArgumentException("a virtual-account top-up needs a bank");
+                throw new InvalidArgumentException("a virtual-account top-up needs a bank");
             }
         } else if (command.method() == PaymentMethod.MIDTRANS_QRIS) {
             if (command.bank() != null) {
-                throw new IllegalArgumentException("a QRIS top-up does not take a bank");
+                throw new InvalidArgumentException("a QRIS top-up does not take a bank");
             }
         } else {
-            throw new IllegalArgumentException("a top-up is paid by virtual account or QRIS");
+            throw new InvalidArgumentException("a top-up is paid by virtual account or QRIS");
         }
 
         return whole.longValueExact();

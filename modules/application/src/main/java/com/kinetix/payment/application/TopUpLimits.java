@@ -1,5 +1,6 @@
 package com.kinetix.payment.application;
 
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import java.math.BigDecimal;
 
 public record TopUpLimits(BigDecimal maximumTopUp, BigDecimal maximumCustomerBalance) {
@@ -10,14 +11,14 @@ public record TopUpLimits(BigDecimal maximumTopUp, BigDecimal maximumCustomerBal
         requireWholeRupiah(maximumCustomerBalance, "the largest customer wallet balance");
 
         if (maximumTopUp.compareTo(TopUpService.MINIMUM_AMOUNT) < 0) {
-            throw new IllegalArgumentException(
+            throw new InvalidArgumentException(
                 "the largest single top-up, " + maximumTopUp.toPlainString()
                     + ", is below the smallest one, " + TopUpService.MINIMUM_AMOUNT.toPlainString()
             );
         }
 
         if (maximumTopUp.compareTo(maximumCustomerBalance) > 0) {
-            throw new IllegalArgumentException(
+            throw new InvalidArgumentException(
                 "a top-up of " + maximumTopUp.toPlainString() + " could never be credited to a wallet "
                     + "that may hold at most " + maximumCustomerBalance.toPlainString()
             );
@@ -26,15 +27,15 @@ public record TopUpLimits(BigDecimal maximumTopUp, BigDecimal maximumCustomerBal
 
     private static void requireWholeRupiah(BigDecimal value, String what) {
         if (value == null || value.signum() <= 0) {
-            throw new IllegalArgumentException(what + " must be a positive amount");
+            throw new InvalidArgumentException(what + " must be a positive amount");
         }
 
         if (value.stripTrailingZeros().scale() > 0) {
-            throw new IllegalArgumentException(what + " must be a whole rupiah amount, not " + value.toPlainString());
+            throw new InvalidArgumentException(what + " must be a whole rupiah amount, not " + value.toPlainString());
         }
 
         if (value.compareTo(LEDGER_CEILING) > 0) {
-            throw new IllegalArgumentException(
+            throw new InvalidArgumentException(
                 what + ", " + value.toPlainString() + ", does not fit the ledger's numeric(12,2) columns"
             );
         }

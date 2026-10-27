@@ -74,6 +74,7 @@ class IdentityOutageThroughTheFilterChainTest {
 
             JsonNode body = json.readTree(response.body());
             assertTrue(body != null && body.hasNonNull("error"), "the body does not carry an error: " + seen);
+            assertEquals("application/json", response.headers().firstValue("Content-Type").orElse(null), seen);
         }
 
         verifyNoInteractions(walletService);

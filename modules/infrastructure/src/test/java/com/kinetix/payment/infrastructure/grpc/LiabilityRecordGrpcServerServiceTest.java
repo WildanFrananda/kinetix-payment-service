@@ -59,6 +59,10 @@ class LiabilityRecordGrpcServerServiceTest {
 
         assertFalse(call.completed);
         assertRefused(Status.Code.NOT_FOUND, "LIABILITY_SNAPSHOT_RECORD_NOT_FOUND");
+        assertEquals(
+            "no liability snapshot " + SNAPSHOT + " was ever taken",
+            ((StatusRuntimeException) call.error).getStatus().getDescription()
+        );
     }
 
     @Test
@@ -83,6 +87,12 @@ class LiabilityRecordGrpcServerServiceTest {
         ask(SNAPSHOT.toString());
 
         assertRefused(Status.Code.UNAVAILABLE, "LIABILITY_SNAPSHOT_RECORD_UNAVAILABLE");
+        StatusRuntimeException refused = (StatusRuntimeException) call.error;
+        assertEquals("the liability snapshot record could not be read; retry it", refused.getStatus().getDescription());
+        assertEquals(
+            "the liability snapshot record could not be read; retry it",
+            refused.getTrailers().get(ERROR_DETAIL).getMessage()
+        );
     }
 
     private void ask(String snapshotId) {

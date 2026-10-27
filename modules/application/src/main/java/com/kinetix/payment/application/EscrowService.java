@@ -14,6 +14,7 @@ import com.kinetix.payment.domain.exception.DuplicateIdempotencyKeyException;
 import com.kinetix.payment.domain.exception.DuplicateOrderNumberException;
 import com.kinetix.payment.domain.exception.EscrowNotFoundException;
 import com.kinetix.payment.domain.exception.IdempotencyConflictException;
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import com.kinetix.payment.domain.exception.OrderAlreadyUnwoundException;
 import com.kinetix.payment.domain.port.AdvisoryLockPort;
 import com.kinetix.payment.domain.port.CustomerWalletRepositoryPort;
@@ -146,7 +147,7 @@ public class EscrowService {
 
     public EscrowOutcome settleShippingFee(String orderNumber, String driverPrincipalId) {
         if (driverPrincipalId == null || driverPrincipalId.isBlank()) {
-            throw new IllegalArgumentException(
+            throw new InvalidArgumentException(
                 "a shipping fee cannot be settled without naming the driver it is owed to"
             );
         }
@@ -291,7 +292,7 @@ public class EscrowService {
 
     public EscrowOutcome refundGoods(String orderNumber, BigDecimal amount, String reason, String idempotencyKey) {
         if (amount == null || amount.signum() <= 0) {
-            throw new IllegalArgumentException("a goods refund must be a positive amount");
+            throw new InvalidArgumentException("a goods refund must be a positive amount");
         }
 
         String key = resolveKey(idempotencyKey, orderNumber);
@@ -811,7 +812,7 @@ public class EscrowService {
             case ESCROW_RELEASE -> "escrow:release:";
             case REFUND -> "escrow:refund:";
             case SHIPPING_FEE -> "escrow:shipping:";
-            case TOPUP -> throw new IllegalArgumentException("a top-up is not an escrow movement");
+            case TOPUP -> throw new InvalidArgumentException("a top-up is not an escrow movement");
         };
 
         return prefix + orderNumber;
@@ -888,7 +889,7 @@ public class EscrowService {
         }
 
         if (supplied.length() > MAX_CALLER_KEY_LENGTH) {
-            throw new IllegalArgumentException(
+            throw new InvalidArgumentException(
                 "an idempotency key may be at most " + MAX_CALLER_KEY_LENGTH + " characters"
             );
         }

@@ -3,6 +3,7 @@ package com.kinetix.payment.infrastructure.gateway;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import com.kinetix.payment.domain.gateway.GatewayCharge;
 import com.kinetix.payment.domain.gateway.GatewayChargeOutcome;
 import com.kinetix.payment.domain.gateway.GatewayChargeRequest;
@@ -192,7 +193,7 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
         switch (request.method()) {
             case MIDTRANS_VA -> {
                 if (request.bank() == null) {
-                    throw new IllegalArgumentException("a virtual-account charge needs a bank");
+                    throw new InvalidArgumentException("a virtual-account charge needs a bank");
                 }
 
                 if (request.bank() == VirtualAccountBank.PERMATA) {
@@ -206,7 +207,7 @@ public class MidtransPaymentGatewayAdapter implements PaymentGatewayPort {
                 body.put("payment_type", "qris");
                 body.put("qris", Map.of("acquirer", QRIS_ACQUIRER));
             }
-            default -> throw new IllegalArgumentException(
+            default -> throw new InvalidArgumentException(
                 "Midtrans charges virtual accounts and QRIS here, not " + request.method()
             );
         }

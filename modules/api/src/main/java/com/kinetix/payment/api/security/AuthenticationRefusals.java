@@ -90,6 +90,6 @@ public final class AuthenticationRefusals implements AuthenticationEntryPoint, A
 
     private void write(HttpServletResponse response, String message) throws IOException {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.getWriter().write(json.writeValueAsString(Map.of("error", message)));
+        response.getOutputStream().write(json.writeValueAsBytes(Map.of("error", message)));
     }
 }

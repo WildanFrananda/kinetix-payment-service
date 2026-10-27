@@ -1,5 +1,6 @@
 package com.kinetix.payment.domain.entity;
 
+import com.kinetix.payment.domain.exception.InvalidArgumentException;
 import com.kinetix.payment.domain.gateway.VirtualAccountBank;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -100,11 +101,11 @@ public record PaymentTransaction(
         requirePending(outcome);
 
         if (outcome == TransactionStatus.PENDING) {
-            throw new IllegalArgumentException("a transaction concludes as something other than pending");
+            throw new InvalidArgumentException("a transaction concludes as something other than pending");
         }
 
         if (outcome == TransactionStatus.NEEDS_ATTENTION) {
-            throw new IllegalArgumentException("a transaction is set aside for attention with a reason");
+            throw new InvalidArgumentException("a transaction is set aside for attention with a reason");
         }
 
         return concluded(outcome, null, gatewayTransactionId, response);
@@ -118,7 +119,7 @@ public record PaymentTransaction(
         requirePending(TransactionStatus.NEEDS_ATTENTION);
 
         if (reason == null) {
-            throw new IllegalArgumentException("a transaction set aside for attention needs a reason");
+            throw new InvalidArgumentException("a transaction set aside for attention needs a reason");
         }
 
         return concluded(TransactionStatus.NEEDS_ATTENTION, reason, gatewayTransactionId, response);
