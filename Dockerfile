@@ -23,12 +23,8 @@ COPY modules/api/build.gradle ./modules/api/
 
 RUN gradle --no-daemon dependencies --quiet || true
 
-# `bin/` is the compiled-class output directory here and is excluded from the build context,
-# so the script lives in scripts/.
 COPY scripts ./scripts
 
-# The wire contracts, at the commit bin/sync-contracts pins. Fetched rather than copied: this
-# repository tracks no .proto at all, which is what S9's exit criterion measures.
 RUN apt-get update \
   && apt-get install --no-install-recommends -y git \
   && sh scripts/sync-contracts \
@@ -40,9 +36,6 @@ RUN gradle --no-daemon :modules:api:bootJar -x test \
 
 FROM eclipse-temurin:21-jre@sha256:227118764cccd3c3294617061aaa93a08309c63a395eefa83e6b35032992ea99 AS final
 
-# The base is pinned by digest, which also means it stops receiving Ubuntu's security updates. CI's image
-# scan fails the build on a CRITICAL that has a fix available — eight of them on the first run — so the
-# patches are applied here. The digest still decides which JRE ships.
 RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
@@ -75,4 +68,6 @@ EXPOSE 8003 50056
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8003/health/ready > /dev/null || exit 1
 
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "/app/application.jar"]
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=60"
+
+ENTRYPOINT ["java", "-jar", "/app/application.jar"]
