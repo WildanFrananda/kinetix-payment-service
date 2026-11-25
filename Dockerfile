@@ -1,4 +1,4 @@
-FROM gradle:8.14.6-jdk21@sha256:c71fc6625c18e889654adeb86c99974028bc888505f6e1fd7eccad057174877d AS build
+FROM gradle:8.14.8-jdk21@sha256:4d38f34feb707ed7fcc9a0643fd99b59ce8743a5f2e238b366b15d25fb57aa7d AS build
 
 COPY security/jdk21-blocked.certs /tmp/jdk21-blocked.certs
 RUN set -eu; \
@@ -34,7 +34,7 @@ COPY modules ./modules
 RUN gradle --no-daemon :modules:api:bootJar -x test \
     && cp modules/api/build/libs/*.jar /src/application.jar
 
-FROM eclipse-temurin:21-jre@sha256:227118764cccd3c3294617061aaa93a08309c63a395eefa83e6b35032992ea99 AS final
+FROM eclipse-temurin:21-jre@sha256:d77e090ae1f6970c047b443c6f0a6c1358b0426d44432bb5a7753408cd43de0d AS final
 
 RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
