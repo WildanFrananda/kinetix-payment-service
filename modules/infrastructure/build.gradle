@@ -2,7 +2,7 @@ plugins {
     id 'java-library'
     id 'org.springframework.boot'
     id 'io.spring.dependency-management'
-    id 'com.google.protobuf' version '0.10.0'
+    id 'com.google.protobuf' version '0.10.1'
 }
 
 repositories {
